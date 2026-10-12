@@ -14,7 +14,8 @@ Kullanim ve format ozeti: [README.md](README.md).
   seceneklerini gosteren ornek; `FLOW_GUIDE.png`: o ornegin uygulamadaki goruntusu; `FLOW_GUIDE.mjs`: dogrulayici
   (`scripts/flow-check.ts` + `format.ts`'ten `npm run build:guide` ile uretilir; dev sunucusu kaynak degisince kendisi uretir).
   Dort dosya tek seydir, hep ayni adla; hepsi MASTER'dir;
-  uygulama secili sema klasorundeki kopyalari master'in aynisi tutar (klasor secilince ve master degisince aninda)
+  uygulama secili sema klasorundeki VE varsayilan `schema/` klasorundeki kopyalari master'in aynisi tutar
+  (klasor secilince ve master degisince aninda)
 
 ## Bakim kurallari
 - **REHBER DORTLUSU (`FLOW_GUIDE.md` + `.flow` + `.png` + `.mjs`) HER ZAMAN BIRLIKTE GUNCEL KALIR.**

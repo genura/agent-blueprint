@@ -69,6 +69,16 @@ f6 rect B 440 1280 140 48 f6
 f7 rect B 440 1360 140 48 f7
 f8 rect B 440 1440 140 48 f8
 f9 rect B 440 1520 140 48 f9
+p1 rect B 0 1560 140 48 p1
+p2 rect B 0 1640 140 48 p2
+p3 rect B 0 1720 140 48 p3
+p4 rect B 0 1800 140 48 p4
+q1 rect B 440 1600 140 48 q1
+q2 rect B 440 1680 140 48 q2
+q3 rect B 440 1760 140 48 q3
+q4 rect B 440 1840 140 48 q4
+r1 rect B 0 1880 140 48 r1
+r2 rect B 440 1920 140 48 r2
 h5 text.l k 700 780 - - **5. Sides :XY, bend @dx,dy, direction**
 c rect.l V 980 1080 160 80 c
 nt rect T 980 860 160 64 nt
@@ -99,6 +109,11 @@ e6>f6/3 /3 thick
 e7>f7/~ /~ dashed
 e8>f8/r /r red
 e9>f9/v|3~ /v|3~ combined
+p1>q1/>t />t triangle end
+p2>q2/<c /<c circle start
+p3>q3/<d>t /<d>t diamond, triangle
+p4>q4/<a /<a arrow both ends
+r1>r2/^ /^ above nodes
 c>nt/:tb :tb
 c>nr/:rl :rl
 c>nr/:tt :tt (2nd edge, same pair)

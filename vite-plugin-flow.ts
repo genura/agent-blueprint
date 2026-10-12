@@ -58,8 +58,7 @@ export function flowFiles(defaultDir = 'schema'): Plugin {
       const root = server.config.root;
       // FLOW_CONFIG: testte ayri ayar dosyasi kullanmak icin
       const cfgPath = process.env.FLOW_CONFIG ?? path.join(root, 'flow.config.json');
-      let cfg: Config = { dir: path.resolve(root, defaultDir), recent: [] };
-      try {
+      let cfg: Config = { dir: path.resolve(root, defaultDir), recent: [] };      try {
         cfg = { ...cfg, ...JSON.parse(fs.readFileSync(cfgPath, 'utf8')) };
       } catch {
         // ayar dosyasi yoksa varsayilan klasor
@@ -70,13 +69,18 @@ export function flowFiles(defaultDir = 'schema'): Plugin {
       // Rehber dort dosya, hepsi ayni adla: metin (.md), ornek sema (.flow), goruntusu (.png), dogrulayici (.mjs)
       const GUIDE_FILES = ['FLOW_GUIDE.md', 'FLOW_GUIDE.flow', 'FLOW_GUIDE.png', 'FLOW_GUIDE.mjs'];
       const guideDir = path.join(root, 'guide');
+      // Varsayilan klasor (schema/) baska klasor secili olsa da guncel kalir: geri donuldugunde kopya eski olmasin
+      const homeDir = path.resolve(root, defaultDir);
       const installGuide = () => {
-        for (const name of GUIDE_FILES) {
-          const src = path.join(guideDir, name);
-          const dst = path.join(cfg.dir, name);
-          if (!fs.existsSync(src) || path.resolve(dst) === path.resolve(src)) continue;
-          const data = fs.readFileSync(src);
-          if (!fs.existsSync(dst) || !fs.readFileSync(dst).equals(data)) fs.writeFileSync(dst, data);
+        for (const dir of new Set([cfg.dir, homeDir])) {
+          fs.mkdirSync(dir, { recursive: true });
+          for (const name of GUIDE_FILES) {
+            const src = path.join(guideDir, name);
+            const dst = path.join(dir, name);
+            if (!fs.existsSync(src) || path.resolve(dst) === path.resolve(src)) continue;
+            const data = fs.readFileSync(src);
+            if (!fs.existsSync(dst) || !fs.readFileSync(dst).equals(data)) fs.writeFileSync(dst, data);
+          }
         }
       };
       for (const name of GUIDE_FILES) fs.watchFile(path.join(guideDir, name), { interval: 500 }, () => installGuide());

@@ -1,5 +1,5 @@
-<!-- flow-guide v16 -->
-# .flow guide v16 (for agents)
+<!-- flow-guide v19 -->
+# .flow guide v19 (for agents)
 
 **FLOW_GUIDE is 4 files with the same name, in this same folder. They are one guide:**
 | file | what to do with it |
@@ -56,6 +56,7 @@ shape:  rect round pill circle diamond db text group(=Section) table
 fmt:    s m l x (font size) < ^ > (align) 0-3 (border width) ~ (dashed) M O W (font) =X (border color)
 color:  k g r o y n t b v p w | UPPERCASE = light tint | - none | #RRGGBB
 opts:   color | elbow  _ straight  - no arrow  1-3 width  ~ dashed  :XY exit/entry side (t r b l *)  @dx,dy bend
+        <X start tip  >X end tip   (X: a line arrow, t triangle, d diamond, c circle, n none)   ^ drawn above the nodes
 x y:    top-left corner, x right, y DOWN; inside a Section x y are relative to it
 w h:    pixels; "-" = auto (x y: placed below; w: shape default; h: fits the text, the app writes the number)
 text:   **bold** ~~strike~~, "- " bullet, \n new line; table cells a|b\nc|d
@@ -104,7 +105,10 @@ opts, any order, all optional:
 | color code | arrow color (see 5) | `g` gray |
 | `\|` | elbow (right angles) | curved |
 | `_` | straight line | curved |
-| `-` | no arrowhead | arrowhead at `to` |
+| `-` | no arrowhead at `to` (same as `>n`) | arrowhead at `to` |
+| `<X` | tip drawn at the `from` end (start). X = `a` line arrow, `t` filled triangle, `d` filled diamond, `c` filled circle, `n` none | `n` none |
+| `>X` | tip drawn at the `to` end (end). Same X letters | `a` line arrow |
+| `^` | the edge is drawn above all nodes (it stays visible where it passes over a box) | drawn below all nodes |
 | `1` `2` `3` | line width thin / normal / thick | `2` |
 | `~` | dashed | solid |
 | `:XY` | side where the arrow leaves `from` (X) and enters `to` (Y): `t` top `r` right `b` bottom `l` left `*` auto | nearest sides |
@@ -112,6 +116,10 @@ opts, any order, all optional:
 
 Example: `n4>n7/:rl` = arrow from n4's right side to n7's left side, gray, curved, with arrowhead.
 `n7>n8/:rb` = leaves n7 on the right, enters n8 from the bottom (so it goes up into n8).
+
+Tips (`<X`, `>X`) only change the drawing at the two ends. They never change the direction: `a>b/<a` is still an edge
+from a to b, drawn with an arrowhead at both ends. `a>b/<c>t` = filled circle at a, filled triangle at b.
+The app does not write defaults: it writes `-` for "no tip at `to`", and never writes `<n` or `>a`.
 
 ## 4. fmt chars (node style)
 | char | meaning | default |
@@ -176,7 +184,8 @@ Careful: inside fmt, `l` is "large font", not "left"; `O` is Orbitron, not orang
   Two groups must be either disjoint or one fully inside the other (partial overlap is an error); no duplicate lines.
   In the app, ungrouping removes only the outermost layer, so keep inner lines when removing an outer one.
 - Several edges between the same two nodes are allowed.
-- Later lines are drawn on top of earlier ones.
+- Later node lines are drawn on top of earlier node lines. Edges have only two layers, set by the `^` option and not
+  by line order: below all nodes (default) or above all nodes (`^`). Edge labels are always on top.
 - Then run the validator (`node FLOW_GUIDE.mjs <file.flow>`) and fix what it reports.
 
 ## 9. What the app does to the file
@@ -213,3 +222,23 @@ How to read it:
 - `a>b/| saves`: gray elbow arrow from a to b, labeled "saves".
 - `b>c/r~ triggers`: red dashed curved arrow from b to c, labeled "triggers".
 - `&a,c`: a and c are grouped (selected and moved together); b is not.
+
+## 11. Writing a file from a picture (screenshot, export, photo, sketch)
+A picture has no fixed scale: it is often enlarged (exports are commonly 2x). Do not copy pixel numbers from it.
+1. Find the scale first. In the app a normal box border and a normal edge line are 3 px wide, and most text is 15 px
+   high. If they look about twice that in the picture, the picture is 2x: divide every measured distance by 2
+   (by the factor you found). Then round x y w h to multiples of 8.
+2. Sizes are relative, not absolute. Most text is size `s` and most borders and lines are width `2` (the defaults:
+   write nothing). Write `m l x`, or width `1` / `3`, only for an item that is clearly bigger, thinner or thicker
+   than the other items in the same picture. If every line looks equally thick, they are all the default.
+3. Look at both ends of every edge and write what you see:
+   | at the `to` end | write | at the `from` end | write |
+   |---|---|---|---|
+   | two open strokes (plain arrow) | nothing | nothing | nothing |
+   | filled triangle | `>t` | plain arrow | `<a` |
+   | filled diamond / filled circle | `>d` / `>c` | filled triangle / diamond / circle | `<t` / `<d` / `<c` |
+   | nothing | `-` | | |
+4. `^`: write it only when a line is visibly drawn over a box it crosses. A line hidden behind a box has no `^`.
+5. Bends: a normal curved or elbow line between two sides needs no `@dx,dy`. Write a bend only when the line
+   clearly detours away from that natural path. Write `:XY` for the sides where the line leaves and enters.
+6. A picture cannot show groups (`&` lines) or comments. Do not invent them.
