@@ -58,7 +58,8 @@ export function flowFiles(defaultDir = 'schema'): Plugin {
       const root = server.config.root;
       // FLOW_CONFIG: testte ayri ayar dosyasi kullanmak icin
       const cfgPath = process.env.FLOW_CONFIG ?? path.join(root, 'flow.config.json');
-      let cfg: Config = { dir: path.resolve(root, defaultDir), recent: [] };      try {
+      let cfg: Config = { dir: path.resolve(root, defaultDir), recent: [] };
+      try {
         cfg = { ...cfg, ...JSON.parse(fs.readFileSync(cfgPath, 'utf8')) };
       } catch {
         // ayar dosyasi yoksa varsayilan klasor
