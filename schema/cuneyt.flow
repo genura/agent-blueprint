@@ -1,0 +1,28 @@
+#flow2 guide: FLOW_GUIDE.md in this folder | N:id[@grp] shape[.fmt] color x y w h text | E:from>to[/opts] label
+n1 rect.lO=n Y 992 -272 176 176 ERP
+n2 rect.lW=n R 960 56 176 176 esync
+n3 rect.lW=n r 1200 312 176 176 datapool
+n4 rect.l3W=n t 1496 592 416 176 catalouge manager
+n5 round.lW=n O 2904 168 416 88 panel sync
+n6 pill.3=n y 2072 256 400 128 barcode generator
+n7 pill.=n y 2392 664 400 144 update - auto update **engine**
+n8 diamond.lW=n r 2376 -88 416 176 catalouge version
+n9 diamond.=n y 1736 -160 176 176
+n10 round.=p B 2872 -256 304 208
+n11 pill.=t O 1408 136 400 48
+n12 rect.=n p 2376 912 176 176
+n13 circle.=y r 3040 272 176 176
+n1>n2/n|:bt
+n2>n3/n|:rl
+n3>n4/n|:rl
+n6>n7/n|:bt
+n7>n8/n|:rb
+n4>n6/n|3:rl
+n8>n5/n|:rl
+n4>n7/n|:rl
+n6>n9/n|3:lr
+n4>n12/n~:*b
+n4>n12/n~:*b
+n4>n12/n~:*b
+n4>n12/n~:tt
+n4>n8/n~:ll

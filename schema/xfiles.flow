@@ -1,0 +1,18 @@
+#flow2 guide: FLOW_GUIDE.md in this folder | N:id[@grp] shape[.fmt] color x y w h text | E:from>to[/opts] label
+n1 rect.mW n 648 424 304 384 **asdasd**
+n2 pill n 1176 648 120 136 asdas
+n3 rect n 1536 144 176 176 asd
+n4 rect R 1496 664 176 176 asdasd
+n5 rect n 1104 104 176 176
+n6 pill R 1936 608 176 176 asdasdasd
+n7 rect R 1496 408 176 176
+n8 pill.mW p 1848 360 176 176 dsfsdf
+n9 round R 1760 928 400 48
+n10 pill n 1264 536 120 136
+n1>n2
+n2>n3
+n2>n5
+n4>n6
+n4>n7
+n7>n8
+n2>n10

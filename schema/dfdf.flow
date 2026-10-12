@@ -1,0 +1,2 @@
+#flow2 N:id[@grp] shape[.fmt] color x y w h text  E:from>to[/opts] label
+#shape:rect round pill circle diamond db text group table  fmt:size s m l x,align < ^ >,border 0-3,~dash  color:k g r o y n t b v p w,UPPER=light,-=none,#hex(text shape:text color)  text:markdown **b** ~~s~~ "- "list,\n=newline,table a|b\nc|d  opts:color |=step _=straight -=noarrow 1-3=width ~=dash :XY=sides(trbl*) @dx,dy=bend from mid  xywh -=auto  @grp xy relative

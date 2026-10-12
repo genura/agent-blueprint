@@ -1,0 +1,108 @@
+#flow2 guide: FLOW_GUIDE.md in this folder | N:id[@grp] shape[.fmt] color x y w h text | E:from>to[/opts] label
+# Visual reference: FLOW_GUIDE.png is this file rendered by the app. Each node's text names its own line.
+h1 text.l k 0 -80 - - **1. Shapes** (node text = shape)
+s1 rect w 0 0 176 120 rect
+s2 round T 224 0 176 120 round
+s3 pill r 448 36 200 48 pill
+s4 circle Y 696 0 120 120 circle
+s5 diamond N 864 0 140 120 diamond
+s6 db B 1052 20 80 80 db
+s7 text k 1180 44 - - text
+s8 table w 1340 0 320 120 table|cells\nrow 2|split by \|
+h2 text.l k 0 180 - - **2. Colors** (lowercase = strong, UPPERCASE = light, - = none, #hex = custom)
+ck rect k 0 240 80 56 k
+cg rect g 96 240 80 56 g
+cr rect r 192 240 80 56 r
+co rect o 288 240 80 56 o
+cy rect y 384 240 80 56 y
+cn rect n 480 240 80 56 n
+ct rect t 576 240 80 56 t
+cb rect b 672 240 80 56 b
+cv rect v 768 240 80 56 v
+cp rect p 864 240 80 56 p
+cw rect w 960 240 80 56 w
+cK rect K 0 312 80 56 K
+cG rect G 96 312 80 56 G
+cR rect R 192 312 80 56 R
+cO rect O 288 312 80 56 O
+cY rect Y 384 312 80 56 Y
+cN rect N 480 312 80 56 N
+cT rect T 576 312 80 56 T
+cB rect B 672 312 80 56 B
+cV rect V 768 312 80 56 V
+cP rect P 864 312 80 56 P
+cx rect.=k - 1056 240 120 56 none (-)
+ch rect #2E7D6B 1056 312 120 56 #2E7D6B
+h3 text.l k 0 440 - - **3. fmt** (chars after the dot; node text = its fmt)
+fs rect w 0 500 160 96 (none) = s
+fm rect.m w 176 500 160 96 .m
+fl rect.l w 352 500 160 96 .l
+fx rect.x w 528 500 160 96 .x
+fa rect.< w 704 500 160 96 .<\nleft
+fr rect.> w 880 500 160 96 .>\nright
+fM rect.M w 1056 500 160 96 .M Montserrat
+fO rect.O w 1232 500 160 96 .O Orbitron
+fW rect.W w 1408 500 160 96 .W Work Sans
+b0 rect.0 O 0 612 160 96 .0 no border
+b1 rect.1 O 176 612 160 96 .1 thin
+b2 rect O 352 612 160 96 (none) = 2
+b3 rect.3 O 528 612 160 96 .3 thick
+bd rect.~ O 704 612 160 96 .~ dashed
+be rect.=v O 880 612 160 96 .=v border v
+bc rect.l3~W=r Y 1056 612 336 96 .l3~W=r (combined)
+h4 text.l k 0 780 - - **4. Edges** (label = its /opts)
+e1 rect B 0 840 140 48 e1
+e2 rect B 0 920 140 48 e2
+e3 rect B 0 1000 140 48 e3
+e4 rect B 0 1080 140 48 e4
+e5 rect B 0 1160 140 48 e5
+e6 rect B 0 1240 140 48 e6
+e7 rect B 0 1320 140 48 e7
+e8 rect B 0 1400 140 48 e8
+e9 rect B 0 1480 140 48 e9
+f1 rect B 440 880 140 48 f1
+f2 rect B 440 960 140 48 f2
+f3 rect B 440 1040 140 48 f3
+f4 rect B 440 1120 140 48 f4
+f5 rect B 440 1200 140 48 f5
+f6 rect B 440 1280 140 48 f6
+f7 rect B 440 1360 140 48 f7
+f8 rect B 440 1440 140 48 f8
+f9 rect B 440 1520 140 48 f9
+h5 text.l k 700 780 - - **5. Sides :XY, bend @dx,dy, direction**
+c rect.l V 980 1080 160 80 c
+nt rect T 980 860 160 64 nt
+nr rect T 1300 1088 160 64 nr
+nb rect T 980 1320 160 64 nb
+nl rect T 700 1088 160 64 nl
+h6 text.l k 1600 780 - - **6. Sections, nesting, markdown**
+g1 group w 1600 880 560 520 Section g1
+a@g1 rect y 40 48 180 80 a@g1
+g2@g1 group w 260 40 260 220 nested Section g2@g1
+d@g2 rect n 40 64 180 80 d@g2
+m@g1 rect.<W w 40 300 480 180 **bold** ~~strike~~ normal\n- bullet one\n- bullet two
+h7 text.l k 1600 1460 - - **7. Groups** (&lg1,lg2,lg3 = all three move together; &lg1,lg2 nested inside it)
+lg1 rect B 1600 1520 160 64 lg1
+lg2 rect B 1800 1520 160 64 lg2
+lg3 rect B 2000 1520 160 64 lg3
+h8 text.l k 1600 1660 - - **8. Comments and h -** (see the # line above node ah in the text)
+# a comment: the app keeps it attached to the line below
+ah rect T 1600 1720 360 - ah: h is - so the app measures this text at w 360 and writes the real height into the file
+&lg1,lg2,lg3
+&lg1,lg2
+e1>f1 (no opts) curved
+e2>f2/| /| elbow
+e3>f3/_ /_ straight
+e4>f4/- /- no arrow
+e5>f5/1 /1 thin
+e6>f6/3 /3 thick
+e7>f7/~ /~ dashed
+e8>f8/r /r red
+e9>f9/v|3~ /v|3~ combined
+c>nt/:tb :tb
+c>nr/:rl :rl
+c>nr/:tt :tt (2nd edge, same pair)
+c>nb/:bt :bt
+c>nb/:rr@120,0 :rr@120,0 bend
+nl>c/:rl nl>c :rl
+a>d

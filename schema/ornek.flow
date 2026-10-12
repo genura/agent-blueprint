@@ -1,0 +1,22 @@
+#flow2 guide: FLOW_GUIDE.md in this folder | N:id[@grp] shape[.fmt] color x y w h text | E:from>to[/opts] label
+g1 group w 888 -136 496 408 Shop List
+n1 rect T -632 -296 176 176 normal kataloglar
+n2 rect y -120 -216 416 176 Sepcial katalog #1\nhide-show.toggle = true\nPrice.show = false\n\nornek : 50 urunden 25 gizlendi
+n3 rect y -416 216 416 176 Sepcial katalog #2\nhide-show.toggle = true\nPrice.show = true\n\nornek : 50 urunden 12 gizlendi\nurun fiyatlari gorulebilir duruma !
+n4 rect y -472 496 416 176 Sepcial katalog #3\nhide-show.toggle = true\nPrice.show = false\n\nornek : 50 urunden 38 gizlendi
+s1@g1 pill r 48 48 400 48 shop id, name #1 | price_list = 1
+s2@g1 pill r 48 120 400 48 shop id, name #2 | price_list = 0
+s3@g1 pill r 48 184 400 48 shop id, name #3 | price_list = 1
+s4@g1 pill r 48 248 400 48 shop id, name #4 | price_list = 0
+s5@g1 pill r 72 344 400 48 shop id, name #5 | price_list = 0
+n1>n2/t
+n2>n3/y|
+n3>n4/y|
+n2>n3/:rr Copy / Paste Filter Properties
+s1>n2 assign = yes
+s5>n2/k assign = yes
+s2>n3/r assign = no
+s4>n3/v assign = no
+s5>n3/p assign = no
+s3>n4/:lr assign = yes
+n3>n1

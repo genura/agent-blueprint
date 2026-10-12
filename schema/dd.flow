@@ -1,0 +1,8 @@
+#flow1 N:id[@grp] shape color x y w h text  E:from>to[/opts] label
+#shape:rect round pill circle diamond db text group  color:k g r o y n t b v p w,UPPER=light,-=none,#hex  opts:color |=step -=noarrow :XY=sides(trbl*)  \n=newline  xywh -=auto  @grp xy relative
+n4 group R -80 96 496 408
+n2 text O 440 448 160 40
+n3 db T 200 608 80 80
+n5 rect w 112 736 176 176
+n1 round T -296 488 304 208
+n1>n3/o
