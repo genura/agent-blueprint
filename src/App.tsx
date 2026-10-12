@@ -14,10 +14,11 @@ import { FilePicker } from './components/FilePicker';
 import { ContextMenu, selectionKind } from './components/ContextMenu';
 import type { ContextTarget } from './components/ContextMenu';
 import { initHotbar } from './flow/hotbar';
+import { aimClear, aimTarget, aimUpdate } from './flow/aim';
 import { absPosition } from './flow/groups';
 import { selSig, useTabLabel } from './flow/tabLabel';
 import { compactNumber, useTokens } from './flow/useTokens';
-import { PanelLeftOpen } from 'lucide-react';
+import { EyeOff, PanelLeftOpen } from 'lucide-react';
 import type { FlowEdge as FlowEdgeT, ShapeNode as ShapeNodeT } from './flow/store';
 import { ShapeNode } from './components/ShapeNode';
 import { FlowEdge } from './components/FlowEdge';
@@ -43,6 +44,11 @@ function stopGesture() {
   // React Flow'un surukleme/boyutlandirma islemini bitir, kendi tutamaclarimiza haber ver
   window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, view: window }));
   window.dispatchEvent(new Event('flowcancel'));
+}
+
+function exitAim() {
+  aimClear();
+  if (useFlow.getState().aimMode) useFlow.setState({ aimMode: false });
 }
 
 // Tab ile yerlestirme araclari arasinda gezinme sirasi (alttaki cubukla ayni)
@@ -75,6 +81,13 @@ function tabSelect(back: boolean) {
     });
     const sig = selSig(nodes, edges);
     useTabLabel.setState({ label, sig });
+    // Klavye odagini da secime tasi: eski odak baska (secili olmayan) bir nesnede kalirsa ok tuslari ve diger
+    // nesne kisayollari secime ulasmaz. Baglanti-yalniz adiminda eski nesne odagi birakilir.
+    requestAnimationFrame(() => {
+      const el = nodes.length ? document.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(nodes[0])}"]`) : null;
+      if (el) el.focus({ preventScroll: true });
+      else (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('.react-flow__node')?.blur();
+    });
     return sig;
   };
 
@@ -272,6 +285,20 @@ function BarStatus() {
   );
 }
 
+// Klavyeyle zoom sirasinda tuvalin ortasinda (nisangahin yerinde): yonu gosteren halka (yakinlasirken disari yayilan,
+// uzaklasirken iceri toplanan dalgalar), ortasinda + / - isareti ve altinda o anki zoom yuzdesi
+function ZoomHint({ kind }: { kind: 'in' | 'out' | 'reset' }) {
+  const zoom = useStore((s) => s.transform[2]);
+  return (
+    <div className={`zoom-hint ${kind}`}>
+      <div className="zh-wave" />
+      <div className="zh-wave late" />
+      <div className="zh-ring" />
+      <div className="zh-pct">{Math.round(zoom * 100)}%</div>
+    </div>
+  );
+}
+
 // Sag altta, mini haritanin hemen ustunde: semadaki oge sayilari ve (varsa) secim
 function ItemStats() {
   const sections = useFlow((s) => s.nodes.reduce((k, n) => k + (n.data.shape === 'group' ? 1 : 0), 0));
@@ -349,6 +376,8 @@ function Canvas() {
   const file = useFlow((s) => s.file);
   const fitSignal = useFlow((s) => s.fitSignal);
   const insertHint = useFlow((s) => s.insertHint);
+  const tbHidden = useFlow((s) => s.tbHidden);
+  const superPreview = useFlow((s) => !!s.quickKeys); // Ctrl+Alt+Shift modu acik: secim cubugu gizlenir
   // Yeni olusturulan nesne: onizlemedeki "basma" animasyonuyla ayni esnek belirme; bitince isaret temizlenir
   const popIds = useFlow((s) => s.popIds);
   useEffect(() => {
@@ -387,6 +416,30 @@ function Canvas() {
     apply(rfStore.getState().transform[2]);
     return rfStore.subscribe((s) => apply(s.transform[2]));
   }, [rfStore]);
+
+  // Nisangah: gorunum kaydikca / zoom degistikce ortadaki ogeyi yeniden bul. Fareyle bir yere basmak moddan cikarir.
+  useEffect(() => {
+    let raf = 0;
+    const unsub = rfStore.subscribe((s, prev) => {
+      if (s.transform === prev.transform || !useFlow.getState().aimMode) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => aimUpdate(wrap.current));
+    });
+    const onDown = () => { if (useFlow.getState().aimMode) exitAim(); };
+    window.addEventListener('pointerdown', onDown, true);
+    return () => {
+      unsub();
+      cancelAnimationFrame(raf);
+      window.removeEventListener('pointerdown', onDown, true);
+    };
+  }, [rfStore]);
+  // Bir sey secildiyse (Enter, fare, Tab...) nisangah modu biter
+  const aimMode = useFlow((s) => s.aimMode);
+  const zoomHint = useFlow((s) => s.zoomHint);
+  const anySelected = selectedNodes.length + selectedEdges.length > 0;
+  useEffect(() => {
+    if (aimMode && anySelected) exitAim();
+  }, [aimMode, anySelected]);
 
   useEffect(() => rfStore.subscribe((s, prev) => {
     if (s.userSelectionActive && s.userSelectionRect && s.userSelectionRect !== prev.userSelectionRect)
@@ -468,11 +521,58 @@ function Canvas() {
     };
     window.addEventListener('keyup', onShiftUpTime, true);
     window.addEventListener('keydown', onShiftNumpad, true);
+    // Klavyeyle akici kaydirma: basili ok tuslari hedef hizi belirler; gercek hiz ona yumusakca yaklasir (ivme/fren).
+    const PAN_SPEED = 320, PAN_FAST = 1100, PAN_EASE = 0.1; // ekran pikseli/sn (normal, Shift) ve yumusama suresi (sn)
+    const panKeys = new Set<string>();
+    let panShift = false, panRaf = 0, panLast = 0, panVx = 0, panVy = 0;
+    const panFrame = (now: number) => {
+      const dt = Math.min(0.05, (now - panLast) / 1000);
+      panLast = now;
+      // Moddan cikildiysa (secim yapildi, baska tusa/fareye basildi) tuslar yok sayilir: hareket yumusakca durur
+      if (!useFlow.getState().aimMode) panKeys.clear();
+      const speed = panShift ? PAN_FAST : PAN_SPEED;
+      const tx = ((panKeys.has('ArrowRight') ? 1 : 0) - (panKeys.has('ArrowLeft') ? 1 : 0)) * speed;
+      const ty = ((panKeys.has('ArrowDown') ? 1 : 0) - (panKeys.has('ArrowUp') ? 1 : 0)) * speed;
+      const k = 1 - Math.exp(-dt / PAN_EASE);
+      panVx += (tx - panVx) * k;
+      panVy += (ty - panVy) * k;
+      if (!panKeys.size && Math.hypot(panVx, panVy) < 4) {
+        panVx = panVy = 0;
+        panRaf = 0;
+        return;
+      }
+      const v = rf.getViewport();
+      // Saga basinca gorunum saga gider: icerik sola kayar
+      void rf.setViewport({ x: v.x - panVx * dt, y: v.y - panVy * dt, zoom: v.zoom });
+      panRaf = requestAnimationFrame(panFrame);
+    };
+    const onPanUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') panShift = false;
+      panKeys.delete(e.key);
+    };
+    const onPanShift = (e: KeyboardEvent) => { if (e.key === 'Shift' && panKeys.size) panShift = true; };
+    const onPanBlur = () => panKeys.clear();
+    window.addEventListener('keyup', onPanUp, true);
+    window.addEventListener('keydown', onPanShift, true);
+    window.addEventListener('blur', onPanBlur);
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest('input, textarea, select')) return;
       const s = useFlow.getState();
       const selected = s.nodes.filter((n) => n.selected);
       const mod = e.ctrlKey || e.metaKey;
+      // Nisangah modu: Enter ortadaki ogeyi secer ve moddan cikar; ok tuslari (Shift ile) kaydirmaya devam eder;
+      // baska her tus moddan cikarir ve kendi isini yapar.
+      if (s.aimMode) {
+        if (e.key === 'Enter' && !mod && !e.altKey) {
+          e.preventDefault();
+          const t = aimTarget();
+          exitAim();
+          if (t?.kind === 'node') s.onNodesChange([{ id: t.id, type: 'select', selected: true }]);
+          else if (t) useFlow.setState({ edges: useFlow.getState().edges.map((x) => (x.id === t.id ? { ...x, selected: true } : x)) });
+          return;
+        }
+        if (!e.key.startsWith('Arrow') && e.key !== 'Shift') exitAim();
+      }
       if (e.shiftKey && !mod && (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit0')) {
         e.preventDefault();
         viewKey(e.code.slice(-1));
@@ -523,19 +623,23 @@ function Canvas() {
         return;
       }
       if (mod || e.altKey) return;
-      // Hicbir sey secili degilken yon tuslari tuvali kaydirir (FigJam); Shift = buyuk adim
+      // Hicbir sey secili degilken yon tuslari tuvali kaydirir (FigJam); Shift = hizli. Hareket akicidir: tus basiliyken
+      // hiz yumusakca artar, birakinca yumusakca durur (asagidaki panFrame). Kisa basis kucuk, hassas bir kayma yapar.
       if (e.key.startsWith('Arrow') && !selected.length && !s.edges.some((x) => x.selected)) {
         e.preventDefault();
-        const step = e.shiftKey ? 240 : 80;
-        const v = rf.getViewport();
-        const dx = e.key === 'ArrowLeft' ? step : e.key === 'ArrowRight' ? -step : 0;
-        const dy = e.key === 'ArrowUp' ? step : e.key === 'ArrowDown' ? -step : 0;
-        void rf.setViewport({ x: v.x + dx, y: v.y + dy, zoom: v.zoom }, e.repeat ? undefined : { duration: 120 });
+        panShift = e.shiftKey;
+        panKeys.add(e.key);
+        if (!panRaf) { panLast = performance.now(); panRaf = requestAnimationFrame(panFrame); }
+        // Klavyeyle kaydirma basladi: nisangahi goster (ortadaki oge, gorunum degistikce asagidaki abonelikle guncellenir)
+        if (!s.aimMode) useFlow.setState({ aimMode: true });
+        requestAnimationFrame(() => aimUpdate(wrap.current));
         return;
       }
       // Nesne secili ama klavye odagi nesnede degil (Tab, alan secimi, Ctrl+A ile secildi): React Flow ok tuslarini
       // yalniz odaktaki nesnede isler, bu yuzden tasimayi burada yap. Odak nesnedeyse React Flow tasir (cift tasima olmaz).
-      if (e.key.startsWith('Arrow') && selected.length && !(e.target as HTMLElement).closest('.react-flow__node')) {
+      // Dikkat: odak SECILI OLMAYAN bir nesnede kalmis olabilir (once ona tiklandi, sonra Tab baska nesneyi secti);
+      // React Flow o durumda hicbir seyi tasimaz, bu yuzden yalniz odak secili bir nesnedeyse ona birakilir.
+      if (e.key.startsWith('Arrow') && selected.length && !(e.target as HTMLElement).closest('.react-flow__node.selected')) {
         e.preventDefault();
         const step = e.shiftKey ? 32 : 8;
         const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
@@ -572,6 +676,7 @@ function Canvas() {
         return;
       }
       if (e.key === 'f' || e.key === 'F') s.toggleBar();
+      else if (e.key === 'm' || e.key === 'M') s.toggleTb();
       else if (e.key === 'v' || e.key === 'V') { s.setPlacing(null); setTool('select'); }
       else if (e.key === 'h' || e.key === 'H') { s.setPlacing(null); setTool('hand'); }
       else if (e.key === 't' || e.key === 'T') s.setPlacing('text');
@@ -672,19 +777,87 @@ function Canvas() {
       if (e.key === 'Shift' && hint) useFlow.getState().splitEdge(hint.edge, hint.node);
     };
     window.addEventListener('keyup', onShiftUp);
-    // Ctrl + / - / 0 (FigJam): yakinlas / uzaklas / %100. Tarayicinin kendi sayfa zoom'u yerine tuval zoom'u; yazi alaninda da gecerli.
+    // Klavye zoom'u (tek tanim): Ctrl + arti ya da Ctrl + Yukari = yakinlas; Ctrl + eksi ya da Ctrl + Asagi = uzaklas; Ctrl+0 = %100.
+    //   - kisa basis: bir kademe
+    //   - basili tutma: sabit hizda akici zoom
+    //   - cift basip ikincide basili tutma: basili kaldikca hizlanan (ivmeli) zoom
+    // Tarayicinin kendi sayfa zoom'u yerine tuval zoom'u; yazi alaninda da gecerli. Ekranin ortasina gore yakinlasir.
+    // Ctrl + Yukari/Asagi, boyutlandirilabilir bir nesne seciliyken zoom degil boyutlandirmadir (asagidaki onResizeKey).
+    const HOLD_MS = 160, DOUBLE_MS = 320, RATE = 0.9; // RATE: saniyedeki ustel hiz (0.9 ~ saniyede 2.5 kat)
+    let zoomRun: { dir: 1 | -1; t0: number; last: number; boost: boolean; started: boolean; raf: number } | null = null;
+    // Ortadaki zoom gostergesi: zoom basladiginda gorunur, bittikten kisa sure sonra kaybolur
+    let zoomHintT: ReturnType<typeof setTimeout> | undefined;
+    const showZoomHint = (kind: 'in' | 'out' | 'reset') => {
+      clearTimeout(zoomHintT);
+      if (useFlow.getState().zoomHint !== kind) useFlow.setState({ zoomHint: kind });
+    };
+    const hideZoomHint = (ms: number) => {
+      clearTimeout(zoomHintT);
+      zoomHintT = setTimeout(() => useFlow.setState({ zoomHint: null }), ms);
+    };
+    let lastTap = { dir: 0, at: -1e9 };
+    const zoomFrame = (now: number) => {
+      const z = zoomRun;
+      if (!z) return;
+      const held = now - z.t0;
+      if (held >= HOLD_MS) {
+        const dt = Math.min(0.05, (now - z.last) / 1000);
+        // Ivme: hiz, basili kalinan her saniyede baslangic hizi kadar artar (1 sn sonra 2 kat, 2 sn sonra 3 kat), en fazla 5 kat
+        const rate = z.boost ? RATE * Math.min(5, 1 + (held - HOLD_MS) / 1000) : RATE;
+        const cur = rf.getZoom();
+        const next = Math.min(4, Math.max(0.1, cur * Math.exp(z.dir * rate * dt)));
+        if (z.started && next !== cur) void rf.zoomTo(next);
+        z.started = true;
+      }
+      z.last = now;
+      z.raf = requestAnimationFrame(zoomFrame);
+    };
+    const stopZoom = (tap: boolean) => {
+      const z = zoomRun;
+      if (!z) return;
+      zoomRun = null;
+      cancelAnimationFrame(z.raf);
+      hideZoomHint(z.started ? 450 : 650);
+      const now = performance.now();
+      // Akis baslamadan birakildiysa kisa basistir: bir kademe
+      if (tap && !z.started) {
+        if (z.dir > 0) void rf.zoomIn({ duration: 150 });
+        else void rf.zoomOut({ duration: 150 });
+        lastTap = { dir: z.dir, at: now };
+      } else lastTap = { dir: 0, at: now };
+    };
     const onZoomKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
       const k = e.key, c = e.code;
-      const act = k === '+' || k === '=' || c === 'NumpadAdd' ? 'in' : k === '-' || k === '_' || c === 'NumpadSubtract' ? 'out' : (k === '0' || c === 'Numpad0') && !e.shiftKey ? 'reset' : null;
+      let act: 'in' | 'out' | 'reset' | null =
+        k === '+' || k === '=' || c === 'NumpadAdd' ? 'in' : k === '-' || k === '_' || c === 'NumpadSubtract' ? 'out' : (k === '0' || c === 'Numpad0') && !e.shiftKey ? 'reset' : null;
+      if (!act && (k === 'ArrowUp' || k === 'ArrowDown') && !e.shiftKey) {
+        const inField = !!(e.target as HTMLElement).closest?.('input, textarea, select');
+        const resizable = useFlow.getState().nodes.some((n) => n.selected && n.data.shape !== 'text');
+        if (!inField && !resizable && !document.querySelector('.table-node.cell-mode')) act = k === 'ArrowUp' ? 'in' : 'out';
+      }
       if (!act) return;
       e.preventDefault();
       e.stopPropagation();
-      if (document.querySelector('.modal-backdrop')) return;
-      if (act === 'in') void rf.zoomIn({ duration: 150 });
-      else if (act === 'out') void rf.zoomOut({ duration: 150 });
-      else void rf.zoomTo(1, { duration: 200 });
+      if (e.repeat || document.querySelector('.modal-backdrop')) return;
+      if (act === 'reset') {
+        stopZoom(false);
+        showZoomHint('reset');
+        hideZoomHint(750);
+        return void rf.zoomTo(1, { duration: 200 });
+      }
+      const dir = act === 'in' ? 1 : -1;
+      stopZoom(false);
+      showZoomHint(act);
+      const now = performance.now();
+      zoomRun = { dir, t0: now, last: now, started: false, raf: 0, boost: lastTap.dir === dir && now - lastTap.at < DOUBLE_MS };
+      zoomRun.raf = requestAnimationFrame(zoomFrame);
     };
+    // Herhangi bir tus birakilinca (zoom tusu ya da Ctrl) akis durur
+    const onZoomUp = () => stopZoom(true);
+    const onZoomBlur = () => stopZoom(false);
+    window.addEventListener('keyup', onZoomUp, true);
+    window.addEventListener('blur', onZoomBlur);
     // Ctrl+Alt+Shift basili (FigJam hizli eklemenin klavye hali): secili nesnenin bos yonlerinde baglantili kopya onizlemeleri
     // gorunur. Ok tuslari yonu secer, Enter o yonde nesneyi olusturur ve secim ona gecer (tuslar basiliyken zincir kurulabilir).
     // Uc tustan biri birakilinca onizlemeler kapanir.
@@ -713,7 +886,11 @@ function Canvas() {
         if (st.quickKeys && !trio) quickOff();
         return;
       }
-      if (document.querySelector('.modal-backdrop') || (e.target as HTMLElement).closest?.('input, textarea, select')) return;
+      // Nesnenin yazisi duzenlenirken de calisir (yeni nesne yazmaya hazir geldigi icin zincir de boyle surer).
+      // Diger yazi alanlarinda (arama, tablo hucresi, baglanti etiketi) calismaz; yazi nesnesi zaten kapsam disi.
+      const field = (e.target as HTMLElement).closest?.<HTMLElement>('input, textarea, select') ?? null;
+      const chainField = field && field.classList.contains('node-input') ? field : null;
+      if (document.querySelector('.modal-backdrop') || (field && !chainField) || (!field && st.editingId)) return;
       // Baslangicta ya da secim bu arada degistiyse (onizleme baska nesnede kaldiysa) yeniden kur
       if (!st.quickKeys || !st.nodes.some((n) => n.id === st.quickKeys!.node && n.selected)) {
         st.startQuickKeys();
@@ -734,7 +911,8 @@ function Canvas() {
         e.preventDefault();
         e.stopPropagation();
         if (e.repeat || !qk.side) return;
-        st.quickAdd(qk.node, qk.side, false, qk.alt);
+        chainField?.blur(); // onceki nesnenin yazi kutusunu kapat (yazilan varsa kaydedilir)
+        st.quickAdd(qk.node, qk.side, true, qk.alt);
         // Yeni nesne secili: onizlemeler ona gore yenilenir, ayni yon bossa secili kalir
         useFlow.getState().startQuickKeys(qk.side);
       }
@@ -754,7 +932,14 @@ function Canvas() {
       window.removeEventListener('keydown', onQuickKeys, true);
       window.removeEventListener('keyup', onQuickKeys, true);
       window.removeEventListener('blur', quickOff);
+      window.removeEventListener('keyup', onPanUp, true);
+      window.removeEventListener('keydown', onPanShift, true);
+      window.removeEventListener('blur', onPanBlur);
+      cancelAnimationFrame(panRaf);
       window.removeEventListener('keydown', onZoomKey, true);
+      window.removeEventListener('keyup', onZoomUp, true);
+      window.removeEventListener('blur', onZoomBlur);
+      stopZoom(false);
       window.removeEventListener('keydown', onResizeKey, true);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('copy', onCopy);
@@ -1125,7 +1310,7 @@ function Canvas() {
             `}</style>
           )}
           {selectedNodes.length > 1 && <SelectionFrame ids={selectedNodes.map((n) => n.id)} />}
-          <NodeToolbar nodeId={selectedNodes.map((n) => n.id)} isVisible={selectedNodes.length > 0 && !dragging && !connecting && !pending}
+          <NodeToolbar nodeId={selectedNodes.map((n) => n.id)} isVisible={selectedNodes.length > 0 && !dragging && !connecting && !pending && !superPreview && !tbHidden}
             position={Position.Top} offset={44}>
             {selectedNodes.length > 0 && (
               <div className="tb-wrap">
@@ -1134,7 +1319,7 @@ function Canvas() {
               </div>
             )}
           </NodeToolbar>
-          {!selectedNodes.length && selectedEdges.length > 1 && !dragging && <EdgesBar edges={selectedEdges} />}
+          {!selectedNodes.length && selectedEdges.length > 1 && !dragging && !tbHidden && <EdgesBar edges={selectedEdges} />}
           <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="#C9C9C9" bgColor="#F5F5F5" />
           <Controls showInteractive={false} />
           <MiniMap pannable zoomable nodeColor={(n) => nodeColors((n as ShapeNodeT).data.color).fill} />
@@ -1143,6 +1328,15 @@ function Canvas() {
         <div className="empty">Soldan bir sema sec ya da yeni sema olustur.</div>
       )}
       {file && <MainToolbar />}
+      {file && aimMode && !zoomHint && <div className="aim-cross" />}
+      {file && zoomHint && <ZoomHint kind={zoomHint} />}
+      {file && tbHidden && (
+        <button className="tb-hidden-chip" title="Secim menusu gizli. Gostermek icin tikla ya da M'ye bas." onClick={() => useFlow.getState().toggleTb()}>
+          <EyeOff size={14} />
+          <span>Menu gizli</span>
+          <kbd>M</kbd>
+        </button>
+      )}
       {file && <BarStatus />}
       {file && <ItemStats />}
       {pending && <ConnectMenu pending={pending} onClose={closePending} />}

@@ -279,13 +279,13 @@ export function Sidebar() {
       )}
 
       <div className="help">
-        V: sec · H: el · T: yazi · R: son sekil (ilk seferde kutu) · O: daire · F: paneli gizle/goster<br />
+        V: sec · H: el · T: yazi · R: son sekil (ilk seferde kutu) · O: daire · F: paneli gizle/goster · M: secim menusunu gizle/goster<br />
         Arac sec, tikla: yerlestir · basili tutup surukle: boyutlu ciz (Shift: oran sabit) · Tab: sonraki arac · R: rastgele renk · tekerlek: renk degistir · Esc: iptal<br />
         Tab / Shift+Tab: nesneler arasi gez · Coklu secimde Tab: baglantilar → nesneler → hepsi<br />
-        Kenar noktasi +: ayni sekli ekle ve bagla · Ctrl+Alt+Shift basili: bos yonlerde onizleme, ok tuslari yon secer, + / - secili yondeki sekli degistirir (her seferinde yeni renk), Enter ekler<br />
+        Kenar noktasi +: ayni sekli ekle ve bagla · Super onizleme (Ctrl+Alt+Shift basili): bos yonlerde baglantili kopya onizlemesi, ok tuslari yon secer, + / - secili yondeki sekli degistirir (her seferinde yeni renk), Enter ekler<br />
         Ctrl+C / X / V · Ctrl+D: cogalt · Alt+surukle: kopyala<br />
-        Space+surukle: kaydir · secim yokken yon tuslari: kaydir (Shift: buyuk adim)<br />
-        Tekerlek: kaydir · Ctrl+tekerlek: zoom · Ctrl + / - : yakinlas / uzaklas · Ctrl+0: %100<br />
+        Space+surukle: kaydir · secim yokken yon tuslari: kaydir (Shift: buyuk adim), ortada nisangah cikar · Enter: nisangahtaki ogeyi sec<br />
+        Tekerlek: kaydir · Ctrl+tekerlek: zoom · Ctrl + / - ya da Ctrl+Yukari / Asagi: yakinlas / uzaklas (basili tut: akici, cift bas-tut: ivmeli) · Ctrl+0: %100<br />
         Shift+1: tumu · Shift+2: secime zoom · Shift+0: %100<br />
         Cift tik / Enter / F2: metin · Esc: bitir<br />
         Alt: secim cubugu odagi (Sol/Sag gez, Enter calistir, Esc birak) · Alt basili: kisayol rozetleri · Alt+0, 2-9, T Y U I O P [ ]: o dugme/menu · menude yon tuslari + Enter<br />

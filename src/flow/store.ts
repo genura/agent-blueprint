@@ -25,8 +25,8 @@ export const QUICK_GAP = 80;
 // Hizli eklemede baska bir sekil istenirse (Ctrl+Alt+Shift + arti/eksi): sekil ve onizlemede gorunen renkleri.
 // Yalniz secili yondeki onizlemeye uygulanir; diger yonler ayni seklin kopyasi olarak kalir.
 export type QuickAlt = { shape: Shape; color: string; stroke?: string };
-// Arti/eksi ile gezilen sira: arac cubugundaki cizilen ve baglanabilen sekiller (Section yok), yazi en sonda
-export const QUICK_SHAPES: Shape[] = ['rect', 'round', 'pill', 'circle', 'diamond', 'db', 'table', 'text'];
+// Super onizlemede (Ctrl+Alt+Shift) arti/eksi ile gezilen sira: arac cubugundaki sekiller. Section, tablo ve yazi yok.
+export const QUICK_SHAPES: Shape[] = ['rect', 'round', 'pill', 'circle', 'diamond', 'db'];
 // Hizli eklenen nesnenin, kaynagin sol ust kosesine gore yeri ve boyutu. Ayni sekilde: yan yana, ayni hizada.
 // Baska sekilde: o seklin varsayilan boyutu, kaynaga gore ortalanmis. Onizleme ve olusturma ayni hesabi kullanir.
 export function quickOffset(w: number, h: number, side: Side, alt?: Shape) {
@@ -191,6 +191,8 @@ interface FlowState {
   changeShape: (ids: string[], shape: Shape) => void;
   setTool: (t: 'select' | 'hand' | 'text') => void;
   setEditing: (id: string | null) => void;
+  zoomHint: 'in' | 'out' | 'reset' | null; // klavyeyle zoom suruyor: ortada yon/oran gostergesi
+  aimMode: boolean; // klavyeyle kaydirma: ekranin ortasinda nisangah gorunur, altindaki oge on secimdedir
   barHidden: boolean;
   entered: string | null; // cift tikla icine girilen Section (icinde kare secim yapilir)
   setEntered: (id: string | null) => void;
@@ -198,6 +200,8 @@ interface FlowState {
   setEnteredSets: (keys: string[]) => void;
   enterGroupAt: (id: string) => boolean; // node'un bir sonraki grup katmanina gir; girdiyse true
   toggleBar: () => void;
+  tbHidden: boolean; // secim cubugu (nesne/baglanti secilince tepede cikan siyah menu) gizli; M tusu acar/kapatir
+  toggleTb: () => void;
 
   onNodesChange: (c: NodeChange<ShapeNode>[]) => void;
   onEdgesChange: (c: EdgeChange<FlowEdge>[]) => void;
@@ -308,11 +312,19 @@ export const useFlow = create<FlowState>((set, get) => ({
     });
     return true;
   },
+  zoomHint: null,
+  aimMode: false,
   barHidden: (() => { try { return localStorage.getItem('flow-bar-hidden') === '1'; } catch { return false; } })(),
   toggleBar: () => {
     const v = !get().barHidden;
     try { localStorage.setItem('flow-bar-hidden', v ? '1' : '0'); } catch { /* onemsiz */ }
     set({ barHidden: v });
+  },
+  tbHidden: (() => { try { return localStorage.getItem('flow-tb-hidden') === '1'; } catch { return false; } })(),
+  toggleTb: () => {
+    const v = !get().tbHidden;
+    try { localStorage.setItem('flow-tb-hidden', v ? '1' : '0'); } catch { /* onemsiz */ }
+    set({ tbHidden: v });
   },
 
   // Mantiksal grup uyelerinden biri secilince/secimden cikinca hepsi birlikte (Figma grubu)
@@ -392,7 +404,7 @@ export const useFlow = create<FlowState>((set, get) => ({
   startQuickKeys: (prefer, alt) => {
     const s = get();
     const sel = s.nodes.filter((n) => n.selected);
-    if (sel.length !== 1 || ['text', 'group', 'table'].includes(sel[0].data.shape) || s.editingId || s.edges.some((e) => e.selected)) return set({ quickKeys: null });
+    if (sel.length !== 1 || ['text', 'group', 'table'].includes(sel[0].data.shape) || s.edges.some((e) => e.selected)) return set({ quickKeys: null });
     const n = sel[0];
     // Bos yon: kopyanin oturacagi yer baska bir nesneyle cakismiyor (Section'lar engel sayilmaz)
     const abs = absPosition(s.nodes, n.id);
@@ -632,7 +644,8 @@ export const useFlow = create<FlowState>((set, get) => ({
       nodes: regroup(shape === 'group' ? [node, ...others] : [...others, node]),
       popIds: [node.id],
       lastShape: shape === 'group' ? get().lastShape : shape, // Section R tusunun hatirladigi sekil olmaz
-      editingId: shape === 'text' ? node.id : get().editingId,
+      // Figma gibi: yeni nesne olusur olusmaz yazi girmeye hazir (Section'da baslik). Tabloda tek bir yazi alani yok.
+      editingId: shape === 'table' ? get().editingId : node.id,
     });
   },
 

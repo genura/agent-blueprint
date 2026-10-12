@@ -110,6 +110,7 @@ export function FlowEdge({ id, source, target, data, selected }: EdgeProps<FlowE
   const tn = useInternalNode(target);
   const rf = useReactFlow();
   const editing = useFlow((s) => s.editingId === `edge:${id}`);
+  const tbHidden = useFlow((s) => s.tbHidden); // M: secim cubugu gizli
   const onlyThis = useFlow((s) => !s.nodes.some((n) => n.selected) && s.edges.filter((e) => e.selected).length === 1);
   const [dragEnd, setDragEnd] = useState<DragEnd | null>(null);
   const dragRef = useRef<DragEnd | null>(null);
@@ -220,7 +221,7 @@ export function FlowEdge({ id, source, target, data, selected }: EdgeProps<FlowE
           </>
         )}
       </ViewportPortal>
-      <EdgeToolbar edgeId={id} x={lx} y={ly - 36} alignY="bottom" isVisible={!!selected && onlyThis && !editing && !dragEnd}>
+      <EdgeToolbar edgeId={id} x={lx} y={ly - 36} alignY="bottom" isVisible={!!selected && onlyThis && !editing && !dragEnd && !tbHidden}>
         <EdgeBar ids={[id]} data={data} />
       </EdgeToolbar>
     </>

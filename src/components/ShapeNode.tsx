@@ -164,6 +164,30 @@ function CellInput({ value, selectAll = true, onCommit }: {
 
 function SideHandles({ id, data, w, h, quick }: { id: string; data: ShapeData; w: number; h: number; quick: boolean }) {
   const [hover, setHover] = useState<Side | null>(null);
+  // FigJam: imlec nesnenin bir kenarina yaklasinca o kenardaki nokta, daha imlec ustune gelmeden beyaz zeminli ok
+  // dugmesine donusur (sabit boyut). Boylece hedef buyuk ve yerinde durur; ustune gelince onizleme cikar.
+  const [near, setNear] = useState<Side | null>(null);
+  const probe = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const host = probe.current?.parentElement;
+    if (!quick || !host) return setNear(null);
+    const move = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('.side-handle')) return; // dugmenin ustunde: durum aynen kalir
+      const r = host.getBoundingClientRect();
+      // Kenar bolgesi: kisa kenarin %35'i, en fazla 72 ekran pikseli. En yakin kenar secilir; ortada hicbiri.
+      let best: Side | null = null, bd = Math.min(72, Math.min(r.width, r.height) * 0.35);
+      const d: Record<Side, number> = { t: e.clientY - r.top, b: r.bottom - e.clientY, l: e.clientX - r.left, r: r.right - e.clientX };
+      for (const k of ['t', 'r', 'b', 'l'] as Side[]) if (d[k] < bd) { bd = d[k]; best = k; }
+      setNear(best);
+    };
+    const leave = () => setNear(null);
+    host.addEventListener('mousemove', move);
+    host.addEventListener('mouseleave', leave);
+    return () => {
+      host.removeEventListener('mousemove', move);
+      host.removeEventListener('mouseleave', leave);
+    };
+  }, [quick]);
   // Ctrl+Alt+Shift basili: bos yonlerin hepsinde onizleme; secili yon belirgin, digerleri silik
   const keys = useFlow((s) => (s.quickKeys?.node === id ? s.quickKeys : null));
   const g = QUICK_GAP;
@@ -173,9 +197,10 @@ function SideHandles({ id, data, w, h, quick }: { id: string; data: ShapeData; w
   // Arti/eksi ile baska sekil secildiyse yalniz SECILI yondeki onizleme o seklin boyutu ve rengiyle cizilir
   return (
     <>
+      <span ref={probe} hidden />
       {SIDES.map(([s, pos]) => (
-        <Handle key={s} id={s} type="source" position={pos} className={`side-handle ${quick ? 'quick' : ''}`}
-          onMouseEnter={() => quick && setHover(s)} onMouseLeave={() => setHover(null)}
+        <Handle key={s} id={s} type="source" position={pos} className={`side-handle ${quick ? 'quick' : ''} ${quick && near === s ? 'near' : ''}`}
+          onMouseEnter={() => { if (quick) { setHover(s); setNear(s); } }} onMouseLeave={() => setHover(null)}
           onClick={() => {
             if (!quick) return;
             setHover(null);
@@ -448,6 +473,7 @@ export function ShapeNode({ id, data, selected, width, height }: NodeProps<Shape
   const editing = useFlow((s) => s.editingId === id);
   const tool = useFlow((s) => s.tool);
   const entered = useFlow((s) => s.entered === id);
+  const [resizing, setResizing] = useState(false); // tutamacla boyutlandirma suruyor: kenar noktalari/oklar gizlenir
   const rootRef = useRef<HTMLDivElement>(null);
   // Icine girilen Section: disina tiklayinca ya da Esc ile cikilir
   useEffect(() => {
@@ -509,7 +535,7 @@ export function ShapeNode({ id, data, selected, width, height }: NodeProps<Shape
           useFlow.setState((st) => ({ nodes: st.nodes.map((n) => (n.id === id && n.selected ? { ...n, selected: false } : n)) }));
           useFlow.getState().setEntered(id);
         }}>
-        <NodeResizer isVisible={selected && !multi && !entered} autoScale={false} onResizeEnd={regroupLater} minWidth={80} minHeight={60} />
+        <NodeResizer isVisible={selected && !multi && !entered && !editing} autoScale={false} onResizeEnd={regroupLater} minWidth={80} minHeight={60} />
         <div className="group-title" style={{ fontFamily: fontCss(data.font) }} onDoubleClick={start}>
           {editing ? textEl : text ? <InlineText text={text} /> : 'Section'}
         </div>
@@ -529,8 +555,8 @@ export function ShapeNode({ id, data, selected, width, height }: NodeProps<Shape
       };
 
   return (
-    <div className={`shape-node shape-${shape} ${selected ? 'selected' : ''} ${multi ? 'multi' : ''}`} style={style} onDoubleClick={start}>
-      {shape !== 'text' && <NodeResizer isVisible={selected && !multi} autoScale={false} onResizeEnd={regroupLater} minWidth={24} minHeight={24} />}
+    <div className={`shape-node shape-${shape} ${selected ? 'selected' : ''} ${multi ? 'multi' : ''} ${editing ? 'editing' : ''} ${resizing ? 'resizing' : ''}`} style={style} onDoubleClick={start}>
+      {shape !== 'text' && <NodeResizer isVisible={selected && !multi && !editing} autoScale={false} onResizeStart={() => setResizing(true)} onResizeEnd={() => { setResizing(false); regroupLater(); }} minWidth={24} minHeight={24} />}
       {isSvg && <ShapeSvg shape={shape} w={w} h={h} fill={c.fill} stroke={c.stroke} sw={sw} dash={data.dash} />}
       {textEl}
       <SideHandles id={id} data={data} w={w} h={h} quick={!!selected && !multi && shape !== 'text'} />
