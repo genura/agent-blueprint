@@ -118,6 +118,13 @@ export interface FEdge {
   line?: number; // kaynak satir (dogrulayici icin)
 }
 
+// Baglantinin serbest ucu: id yerine "x,y" (hicbir nesneye bagli olmayan ok ucu, mutlak koordinat)
+export function parsePt(s: string): { x: number; y: number } | null {
+  const m = /^(-?\d+),(-?\d+)$/.exec(s);
+  return m ? { x: Number(m[1]), y: Number(m[2]) } : null;
+}
+export const ptText = (x: number, y: number) => `${Math.round(x)},${Math.round(y)}`;
+
 export interface FGraph {
   nodes: FNode[];
   edges: FEdge[];
@@ -160,6 +167,9 @@ export function nodeColors(c: string, shape?: Shape, strokeCode?: string) {
   else stroke = darken(fill, 0.18);
   return { fill, stroke, text };
 }
+
+// Koyu tuval: dosyadaki siyah (k) yazi ve cizgi rengi koyu zeminde gorunmez; ekranda acik tona cevrilir (dosya degismez)
+export const ink = (hex: string, dark: boolean) => (dark && hex.toUpperCase() === PALETTE.k ? '#EDEDED' : hex);
 
 function darken(hex: string, amount: number) {
   const n = parseInt(hex.slice(1), 16);
@@ -358,7 +368,7 @@ export function parseFlow(text: string): { graph: FGraph; errors: string[]; issu
   for (const g of accepted) for (const m of g.members) (byId.get(m)!.sets ??= []).push(g.key);
 
   for (const [ln, edge] of pendingEdges) {
-    const bad = [edge.from, edge.to].find((x) => !ids.has(x));
+    const bad = [edge.from, edge.to].find((x) => !ids.has(x) && !parsePt(x));
     if (bad) fail(ln, 'E_EDGE_NODE', [bad], `edge bilinmeyen node'a bagli "${bad}"`);
     else edges.push(edge);
   }

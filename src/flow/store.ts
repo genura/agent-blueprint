@@ -1,18 +1,19 @@
 import { create } from 'zustand';
 import { applyEdgeChanges, applyNodeChanges } from '@xyflow/react';
 import type { Connection, Edge, EdgeChange, Node, NodeChange } from '@xyflow/react';
-import { DEFAULT_SIZE, newShapeColor, newStrokeColor, parseFlow, parseTable, serializeFlow, tableText } from './format';
+import { DEFAULT_SIZE, newShapeColor, newStrokeColor, parseFlow, parsePt, parseTable, ptText, serializeFlow, tableText } from './format';
 import { absPosition, parentsFirst, regroup } from './groups';
 import { autoSides, makeBox } from './edgeGeom';
 import type { Align, Cap, EdgeKind, FComments, FEdge, FGraph, FNode, Font, Shape, Side, Size } from './format';
 
-export type ShapeData = { shape: Shape; color: string; text: string; size?: Size; align?: Align; font?: Font; weight?: number; dash?: boolean; stroke?: string; sets?: string[]; autoH?: boolean };
+export type ShapeData = { shape: Shape; color: string; text: string; size?: Size; align?: Align; font?: Font; weight?: number; dash?: boolean; stroke?: string; sets?: string[]; autoH?: boolean; pt?: boolean };
 export type ShapeNode = Node<ShapeData, 'shape'>;
 export type FlowEdgeData = {
   color: string; kind: EdgeKind; arrow: boolean; start?: Cap; end?: Cap; top?: boolean; weight?: number; dash?: boolean;
   sides?: [Side | '*', Side | '*']; bend?: [number, number]; label: string;
 };
 export type FlowEdge = Edge<FlowEdgeData, 'flow'>;
+export type ArrowEnd = { id: string; side?: Side | '*' } | { x: number; y: number };
 
 let edgeSeq = 0;
 const OPPOSITE: Record<Side, Side> = { t: 'b', b: 't', l: 'r', r: 'l' };
@@ -71,7 +72,27 @@ const nextId = (nodes: ShapeNode[]) => {
   return `n${k}`;
 };
 const edgeId = () => `e${++edgeSeq}`;
+
+// Serbest ok ucu (dosyada "x,y"): gorunmez, 2x2 px'lik ic nesne (React Flow baglantiyi iki nesne arasinda cizer).
+// Dosyaya nesne olarak yazilmaz; sayilmaz, Tab ile gezilmez, Section'a girmez. Ucu oldugu baglanti silinince o da silinir.
+export const PT = 2;
+let ptSeq = 0;
+export const isPt = (n: { data?: { pt?: boolean } } | undefined) => !!n?.data?.pt;
+export const mkPoint = (x: number, y: number): ShapeNode => ({
+  id: `pt${++ptSeq}`, type: 'point' as 'shape', position: { x: x - PT / 2, y: y - PT / 2 }, width: PT, height: PT,
+  data: { shape: 'rect', color: '-', text: '', pt: true },
+});
+// Hicbir baglantinin ucu olmayan noktalar atilir
+const prunePoints = (nodes: ShapeNode[], edges: FlowEdge[]) => {
+  if (!nodes.some(isPt)) return nodes;
+  const used = new Set(edges.flatMap((e) => [e.source, e.target]));
+  const next = nodes.filter((n) => !isPt(n) || used.has(n.id));
+  return next.length === nodes.length ? nodes : next;
+};
 // Nesnenin grup yolu (sets, en disttan ice), girilen yolla basliyor mu
+// R tusunun hatirlayacagi sekil: yazi (T'nin isi) ve Section R'ye baglanmaz, onceki sekil kalir
+const rShape = (shape: Shape, prev: Shape): Shape => (shape === 'text' || shape === 'group' ? prev : shape);
+
 export const inPath = (sets: string[], path: string[]) => path.every((k, i) => sets[i] === k);
 export const newSetKey = () => 'g' + Math.random().toString(36).slice(2, 8);
 // Section adi: kullanilmayan en kucuk "Section N"
@@ -95,17 +116,28 @@ function toRF(g: FGraph): { nodes: ShapeNode[]; edges: FlowEdge[] } {
     zIndex: n.shape === 'group' ? -1 : undefined,
     data: { shape: n.shape, color: n.color, text: n.text, size: n.size, align: n.align, font: n.font, weight: n.weight, dash: n.dash, stroke: n.stroke, sets: n.sets, ...(n.autoH ? { autoH: true } : {}) },
   }));
+  // "x,y" uclari icin nokta nesneleri
+  const end = (s: string) => {
+    const p = parsePt(s);
+    if (!p) return s;
+    const pt = mkPoint(p.x, p.y);
+    nodes.push(pt);
+    return pt.id;
+  };
   const edges = g.edges.map<FlowEdge>((e) => ({
     id: edgeId(),
     type: 'flow',
-    source: e.from,
-    target: e.to,
+    source: end(e.from),
+    target: end(e.to),
     data: { color: e.color, kind: e.kind, arrow: e.arrow, start: e.start, end: e.end, top: e.top, weight: e.weight, dash: e.dash, sides: e.sides, bend: e.bend, label: e.label },
   }));
   return { nodes, edges };
 }
 
-function fromRF(nodes: ShapeNode[], edges: FlowEdge[]): FGraph {
+function fromRF(all: ShapeNode[], edges: FlowEdge[]): FGraph {
+  // Nokta nesneleri dosyaya yazilmaz: baglantinin ucu "x,y" olur
+  const pts = new Map(all.filter(isPt).map((n) => [n.id, ptText(n.position.x + PT / 2, n.position.y + PT / 2)]));
+  const nodes = pts.size ? all.filter((n) => !pts.has(n.id)) : all;
   return {
     nodes: nodes.map<FNode>((n) => ({
       id: n.id,
@@ -126,8 +158,8 @@ function fromRF(nodes: ShapeNode[], edges: FlowEdge[]): FGraph {
       sets: n.data.sets,
     })),
     edges: edges.map<FEdge>((e) => ({
-      from: e.source,
-      to: e.target,
+      from: pts.get(e.source) ?? e.source,
+      to: pts.get(e.target) ?? e.target,
       ...(e.data as FlowEdgeData),
     })),
   };
@@ -192,6 +224,11 @@ interface FlowState {
   setTool: (t: 'select' | 'hand' | 'text') => void;
   setEditing: (id: string | null) => void;
   zoomHint: 'in' | 'out' | 'reset' | null; // klavyeyle zoom suruyor: ortada yon/oran gostergesi
+  // Sema ici arama (Ctrl+F / F3): kutu acik mi, yazilan sorgu, sadelestirilmis hali (bos = vurgu yok), gezilen oge ('n:id' / 'e:id')
+  searchOpen: boolean;
+  searchQ: string;
+  searchFq: string;
+  searchCur: string | null;
   aimMode: boolean; // klavyeyle kaydirma: ekranin ortasinda nisangah gorunur, altindaki oge on secimdedir
   barHidden: boolean;
   entered: string | null; // cift tikla icine girilen Section (icinde kare secim yapilir)
@@ -202,6 +239,8 @@ interface FlowState {
   toggleBar: () => void;
   tbHidden: boolean; // secim cubugu (nesne/baglanti secilince tepede cikan siyah menu) gizli; M tusu acar/kapatir
   toggleTb: () => void;
+  dark: boolean; // koyu tuval (sag ustteki dugme); yalniz gorunum, dosyaya yazilmaz
+  toggleDark: () => void;
 
   onNodesChange: (c: NodeChange<ShapeNode>[]) => void;
   onEdgesChange: (c: EdgeChange<FlowEdge>[]) => void;
@@ -212,11 +251,21 @@ interface FlowState {
   updateNode: (ids: string[], patch: Partial<ShapeData>) => void;
   updateEdge: (ids: string[], patch: Partial<FlowEdgeData>) => void;
   reconnect: (id: string, end: 'source' | 'target', nodeId: string, side: Side | '*', otherSide?: Side) => void;
-  lastShape: Shape; // en son olusturulan nesnenin sekli: R tusu bu sekli yerlestirmeye alir
+  lastShape: Shape; // en son olusturulan nesnenin sekli (yazi ve Section haric): R tusu bu sekli yerlestirmeye alir
   popIds: string[]; // yeni olusturulan nesneler: kisa bir "belirme" animasyonu oynar, sonra temizlenir
   insertHint: { edge: string; node: string } | null; // Shift+surukle: nesne bu baglantinin arasina girecek (vurgulanir)
   splitEdge: (edgeId: string, nodeId: string) => void; // baglantiyi ikiye bol: kaynak>nesne ve nesne>hedef
   connectTo: (source: string, target: string, fromSide: Side | '*', toSide: Side | '*') => void;
+  // Ok araci: uclar bir nesneye (id, kenar) ya da serbest noktaya ({x,y}) baglanir; tur LINE_TYPES sirasiyla (kind, arrow)
+  addArrow: (from: ArrowEnd, to: ArrowEnd, kind: EdgeKind, arrow: boolean) => void;
+  // Baglanti ucu bos alana birakildi: o uc serbest nokta olur (zaten noktaysa tasinir)
+  freeEnd: (id: string, end: 'source' | 'target', p: { x: number; y: number }) => void;
+  arrowTool: number | null; // ok araci acik: LINE_TYPES sirasi (0 koseli, 1 kavisli, 2 duz ok, 3 duz cizgi)
+  arrowKind: number; // en son secilen ok turu (arac cubugunda gorunen)
+  setArrowTool: (i: number | null) => void;
+  magnet: boolean; // kenetlenme: surukleyince nesneler digerlerinin kenar/ortasina hizalanir; ok uclari nesnelere baglanir
+  toggleMagnet: () => void;
+  guides: { v: [number, number, number][]; h: [number, number, number][] } | null; // hizalama cizgileri: [x, y1, y2] / [y, x1, x2]
   edgeStyle: EdgeStyle;
   newEdge: (source: string, target: string, fromSide?: Side | '*' | null, toSide?: Side | '*' | null) => FlowEdge;
   // Bos alana birakilan baglanti: secilen sekli olusturup baglar ("Aynisindan" = kaynagin kopyasi)
@@ -264,7 +313,7 @@ export const useFlow = create<FlowState>((set, get) => ({
   placingStroke: undefined,
   setPlacing: (placing) => {
     const color = placing ? newShapeColor(placing) : 'w';
-    set({ placing, tool: 'select', placingColor: color, placingStroke: placing ? newStrokeColor(placing, color) : undefined });
+    set({ placing, arrowTool: null, tool: 'select', placingColor: color, placingStroke: placing ? newStrokeColor(placing, color) : undefined });
   },
   lastDup: null,
   setLastDup: (lastDup) => set({ lastDup }),
@@ -313,6 +362,10 @@ export const useFlow = create<FlowState>((set, get) => ({
     return true;
   },
   zoomHint: null,
+  searchOpen: false,
+  searchQ: '',
+  searchFq: '',
+  searchCur: null,
   aimMode: false,
   barHidden: (() => { try { return localStorage.getItem('flow-bar-hidden') === '1'; } catch { return false; } })(),
   toggleBar: () => {
@@ -321,6 +374,12 @@ export const useFlow = create<FlowState>((set, get) => ({
     set({ barHidden: v });
   },
   tbHidden: (() => { try { return localStorage.getItem('flow-tb-hidden') === '1'; } catch { return false; } })(),
+  dark: (() => { try { return localStorage.getItem('flow-dark') === '1'; } catch { return false; } })(),
+  toggleDark: () => {
+    const v = !get().dark;
+    try { localStorage.setItem('flow-dark', v ? '1' : '0'); } catch { /* onemsiz */ }
+    set({ dark: v });
+  },
   toggleTb: () => {
     const v = !get().tbHidden;
     try { localStorage.setItem('flow-tb-hidden', v ? '1' : '0'); } catch { /* onemsiz */ }
@@ -355,7 +414,10 @@ export const useFlow = create<FlowState>((set, get) => ({
       });
     set({ nodes });
   },
-  onEdgesChange: (c) => set({ edges: applyEdgeChanges(c, get().edges) }),
+  onEdgesChange: (c) => {
+    const edges = applyEdgeChanges(c, get().edges);
+    set({ edges, nodes: prunePoints(get().nodes, edges) });
+  },
   // Ayni iki node arasinda birden cok baglanti serbest (FigJam); uclar birakildigi kenara sabitlenir
   onConnect: (c) => {
     if (!c.source || !c.target || c.source === c.target) return;
@@ -392,7 +454,7 @@ export const useFlow = create<FlowState>((set, get) => ({
     set({
       nodes: regroup(parentsFirst([...all.map((x) => (x.selected ? { ...x, selected: false } : x)), node])),
       popIds: [node.id],
-      lastShape: sh,
+      lastShape: rShape(sh, get().lastShape),
       edges: [...get().edges.map((e) => (e.selected ? { ...e, selected: false } : e)), get().newEdge(from, node.id, fromSide, toSide)],
       editingId: sh === 'group' ? get().editingId : node.id,
     });
@@ -443,7 +505,7 @@ export const useFlow = create<FlowState>((set, get) => ({
     set({
       nodes: regroup([...all.map((x) => (x.selected ? { ...x, selected: false } : x)), copy]),
       popIds: [copy.id],
-      lastShape: copy.data.shape,
+      lastShape: rShape(copy.data.shape, get().lastShape),
       edges: [...get().edges, edge],
       editingId: edit ? copy.id : get().editingId,
     });
@@ -459,6 +521,11 @@ export const useFlow = create<FlowState>((set, get) => ({
     // Secili grubun cocuklari (ic ice gruplar dahil) da gelir
     for (const n of parentsFirst(all)) if (n.parentId && sel.has(n.parentId)) sel.add(n.id);
     const byId = new Map(all.map((n) => [n.id, n]));
+    // Secili nesneden cikan serbest uclu ok da gelir (ucundaki nokta kopyaya katilir)
+    for (const e of get().edges) {
+      if (sel.has(e.source) && isPt(byId.get(e.target))) sel.add(e.target);
+      if (sel.has(e.target) && isPt(byId.get(e.source))) sel.add(e.source);
+    }
     const nodes = all.filter((n) => sel.has(n.id)).map((n) => {
       if (!n.parentId || sel.has(n.parentId)) return n;
       // Grubu kopyalanmayan cocuk mutlak konuma gecer
@@ -506,9 +573,14 @@ export const useFlow = create<FlowState>((set, get) => ({
       if (n.parent) n.parent = map.get(n.parent);
       else { n.x += dx; n.y += dy; }
     }
+    // Serbest uclar ("x,y") da nesnelerle ayni kadar kayar
+    const moved = (end: string) => {
+      const p = parsePt(end);
+      return p ? ptText(p.x + dx, p.y + dy) : map.get(end)!;
+    };
     for (const e of graph.edges) {
-      e.from = map.get(e.from)!;
-      e.to = map.get(e.to)!;
+      e.from = moved(e.from);
+      e.to = moved(e.to);
     }
     const rf = toRF(graph);
     if (select) nodes = nodes.map((n) => (n.selected ? { ...n, selected: false } : n));
@@ -643,7 +715,7 @@ export const useFlow = create<FlowState>((set, get) => ({
     set({
       nodes: regroup(shape === 'group' ? [node, ...others] : [...others, node]),
       popIds: [node.id],
-      lastShape: shape === 'group' ? get().lastShape : shape, // Section R tusunun hatirladigi sekil olmaz
+      lastShape: rShape(shape, get().lastShape),
       // Figma gibi: yeni nesne olusur olusmaz yazi girmeye hazir (Section'da baslik). Tabloda tek bir yazi alani yok.
       editingId: shape === 'table' ? get().editingId : node.id,
     });
@@ -730,6 +802,55 @@ export const useFlow = create<FlowState>((set, get) => ({
       }),
     }),
 
+  addArrow: (from, to, kind, arrow) => {
+    const extra: ShapeNode[] = [];
+    const id = (e: ArrowEnd) => {
+      if ('id' in e) return e.id;
+      const p = mkPoint(e.x, e.y);
+      extra.push(p);
+      return p.id;
+    };
+    const source = id(from), target = id(to);
+    const sides: [Side | '*', Side | '*'] = ['side' in from ? from.side ?? '*' : '*', 'side' in to ? to.side ?? '*' : '*'];
+    const edge: FlowEdge = {
+      id: edgeId(), type: 'flow', source, target, selected: true,
+      data: { ...get().edgeStyle, kind, arrow, label: '', sides: sides[0] === '*' && sides[1] === '*' ? undefined : sides },
+    };
+    set({
+      nodes: [...get().nodes.map((n) => (n.selected ? { ...n, selected: false } : n)), ...extra],
+      edges: [...get().edges.map((e) => (e.selected ? { ...e, selected: false } : e)), edge],
+    });
+  },
+  freeEnd: (id, end, p) => {
+    const e = get().edges.find((x) => x.id === id);
+    if (!e) return;
+    const cur = get().nodes.find((n) => n.id === e[end]);
+    if (isPt(cur)) {
+      set({ nodes: get().nodes.map((n) => (n.id === cur!.id ? { ...n, position: { x: p.x - PT / 2, y: p.y - PT / 2 } } : n)) });
+      return;
+    }
+    const pt = mkPoint(p.x, p.y);
+    const d = e.data as FlowEdgeData;
+    const sides: [Side | '*', Side | '*'] = [...(d.sides ?? ['*', '*'])];
+    sides[end === 'source' ? 0 : 1] = '*';
+    const keep = sides[0] !== '*' || sides[1] !== '*';
+    const edges = get().edges.map((x) => (x.id === id ? { ...x, [end]: pt.id, data: { ...d, sides: keep ? sides : undefined, bend: undefined } } : x));
+    set({ nodes: prunePoints([...get().nodes, pt], edges), edges });
+  },
+  arrowTool: null,
+  arrowKind: (() => { try { const v = localStorage.getItem('flow-arrow-kind'); return v && /^[0-3]$/.test(v) ? Number(v) : 1; } catch { return 1; } })(),
+  setArrowTool: (i) => {
+    if (i !== null) try { localStorage.setItem('flow-arrow-kind', String(i)); } catch { /* onemsiz */ }
+    set(i === null ? { arrowTool: null } : { arrowTool: i, arrowKind: i, placing: null, tool: 'select' });
+  },
+  magnet: (() => { try { return localStorage.getItem('flow-magnet') !== '0'; } catch { return true; } })(),
+  toggleMagnet: () => {
+    const v = !get().magnet;
+    try { localStorage.setItem('flow-magnet', v ? '1' : '0'); } catch { /* onemsiz */ }
+    set({ magnet: v });
+  },
+  guides: null,
+
   connectTo: (source, target, fromSide, toSide) => {
     if (source === target) return;
     set({ edges: [...get().edges, get().newEdge(source, target, fromSide, toSide)] });
@@ -815,7 +936,7 @@ export const useFlow = create<FlowState>((set, get) => ({
 
   // Windows'ta Geri Donusum Kutusu'na gider. Acik sema silindiyse siradakine gecilir.
   deleteFile: async (name) => {
-    if (name === GUIDE_FILE) return 'Rehber dosyasi silinemez (uygulama onu master kopyadan uretir)';
+    if (name === GUIDE_FILE) return 'Rehber dosyasi silinemez (guide/ klasorundeki master dosyadir)';
     const r = await fetch(`/api/file?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
     if (!r.ok) return (await r.text()) || 'silinemedi';
     if (name === get().file) await get().fileGone();
@@ -833,7 +954,7 @@ export const useFlow = create<FlowState>((set, get) => ({
     const { file } = get();
     if (!file) return;
     const text = get().toText();
-    // Rehber ornegi salt okunur: bu klasordeki dosya master'in kopyasidir ve onunla ayni kalmali.
+    // Rehber ornegi salt okunur: guide/ klasorundeki master'dan okunur, sunucu yazmaya izin vermez.
     // Degisiklik sadece ekranda kalir (yukseklik olcumu dahil), diske yazilmaz.
     if (file === GUIDE_FILE) return set({ saved: text, current: text, externalChange: false });
     await api.write(file, text);

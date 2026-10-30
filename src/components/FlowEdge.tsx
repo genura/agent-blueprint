@@ -4,21 +4,25 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import type { EdgeProps, InternalNode } from '@xyflow/react';
-import { DASH, EDGE_STROKE, PALETTE, colorHex } from '../flow/format';
+import { DASH, EDGE_STROKE, PALETTE, colorHex, ink } from '../flow/format';
 import { anchor, autoSides, buildPath, makeBox, pointBox } from '../flow/edgeGeom';
 import type { Box, Pt } from '../flow/edgeGeom';
 import { CAP_GEOM, edgeCaps } from '../flow/caps';
 import type { Side } from '../flow/format';
-import { useFlow } from '../flow/store';
+import { PT, useFlow } from '../flow/store';
 import type { FlowEdge as FlowEdgeT } from '../flow/store';
 import { EdgeBar } from './Toolbars';
+import { Hl } from './RichText';
 
 const SELECT = '#4C9AFF';
 
 function box(n: InternalNode): Box {
   const { x, y } = n.internals.positionAbsolute;
+  if (n.type === 'point') return pointBox({ x: x + PT / 2, y: y + PT / 2 }); // serbest uc: ok tam noktada biter
   return makeBox(x, y, n.measured.width ?? n.width ?? 0, n.measured.height ?? n.height ?? 0);
 }
+
+export const nodeBox = box;
 
 function LabelInput({ id, value }: { id: string; value: string }) {
   const [draft, setDraft] = useState(value);
@@ -77,13 +81,13 @@ function startDrag(e: React.PointerEvent, onMove: (dx: number, dy: number, ev: P
 }
 
 type DragEnd = { end: 'source' | 'target'; p: Pt; snap?: { id: string; side: Side } };
-const SNAP_PX = 28; // ekran pikseli: bu mesafedeki node'a uc kilitlenir
+export const SNAP_PX = 28; // ekran pikseli: bu mesafedeki node'a uc kilitlenir
 
 // Noktayi iceren (ya da yakinindaki) en kucuk node ve ona en yakin kenar
-function snapAt(nodes: InternalNode[], p: Pt, skip: string, r: number): { id: string; side: Side } | undefined {
+export function snapAt(nodes: InternalNode[], p: Pt, skip: string, r: number): { id: string; side: Side } | undefined {
   let best: { id: string; side: Side; area: number; d: number } | undefined;
   for (const n of nodes) {
-    if (n.id === skip) continue;
+    if (n.id === skip || n.type === 'point') continue;
     const b = box(n);
     const dx = Math.max(b.x - p.x, 0, p.x - b.x - b.w);
     const dy = Math.max(b.y - p.y, 0, p.y - b.y - b.h);
@@ -110,6 +114,7 @@ export function FlowEdge({ id, source, target, data, selected }: EdgeProps<FlowE
   const tn = useInternalNode(target);
   const rf = useReactFlow();
   const editing = useFlow((s) => s.editingId === `edge:${id}`);
+  const dark = useFlow((s) => s.dark);
   const tbHidden = useFlow((s) => s.tbHidden); // M: secim cubugu gizli
   const onlyThis = useFlow((s) => !s.nodes.some((n) => n.selected) && s.edges.filter((e) => e.selected).length === 1);
   const [dragEnd, setDragEnd] = useState<DragEnd | null>(null);
@@ -135,7 +140,7 @@ export function FlowEdge({ id, source, target, data, selected }: EdgeProps<FlowE
   const p2 = dragEnd?.end === 'target' && !dragEnd.snap ? dragEnd.p : anchor(b, ts);
   const [path, lx, ly] = buildPath(dragEnd ? { ...data, bend: undefined } : data, p1, ss, p2, ts);
 
-  const color = colorHex(data.color) ?? PALETTE.g;
+  const color = ink(colorHex(data.color) ?? PALETTE.g, dark);
   const markerId = `arrow-${id}`;
   const [capS, capE] = edgeCaps(data);
   const stroke = selected ? SELECT : color;
@@ -159,7 +164,7 @@ export function FlowEdge({ id, source, target, data, selected }: EdgeProps<FlowE
     startDrag(e,
       (_dx, _dy, ev) => {
         const p = rf.screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
-        const d = { end, p, snap: snapAt(rf.getNodes().map((n) => rf.getInternalNode(n.id)!).filter(Boolean), p, other, SNAP_PX / rf.getZoom()) };
+        const d = { end, p, snap: !useFlow.getState().magnet ? undefined : snapAt(rf.getNodes().map((n) => rf.getInternalNode(n.id)!).filter(Boolean), p, other, SNAP_PX / rf.getZoom()) };
         dragRef.current = d;
         setDragEnd(d);
       },
@@ -167,8 +172,10 @@ export function FlowEdge({ id, source, target, data, selected }: EdgeProps<FlowE
         const d = dragRef.current;
         dragRef.current = null;
         setDragEnd(null);
-        if (!moved || !ev || !d?.snap) return;
-        useFlow.getState().reconnect(id, end, d.snap.id, d.snap.side, keep);
+        if (!moved || !ev || !d) return;
+        // Bir nesneye birakildi: oraya baglanir. Bos alana: o uc serbest kalir (FigJam)
+        if (d.snap) useFlow.getState().reconnect(id, end, d.snap.id, d.snap.side, keep);
+        else useFlow.getState().freeEnd(id, end, d.p);
       });
   };
 
@@ -200,7 +207,7 @@ export function FlowEdge({ id, source, target, data, selected }: EdgeProps<FlowE
             style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}
             onPointerDown={editing ? undefined : onBendDown}
             onDoubleClick={() => useFlow.getState().setEditing(`edge:${id}`)}>
-            {editing ? <LabelInput id={id} value={data.label} /> : data.label}
+            {editing ? <LabelInput id={id} value={data.label} /> : <Hl s={data.label} />}
           </div>
         )}
       </EdgeLabelRenderer>

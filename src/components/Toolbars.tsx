@@ -247,7 +247,8 @@ export function NodeBar({ nodes }: { nodes: ShapeNode[] }) {
   const first = nodes[0].data;
   const shapes = new Set(nodes.map((n) => n.data.shape));
   const only = (s: Shape) => shapes.size === 1 && shapes.has(s);
-  const hasText = !shapes.has('group') && !shapes.has('table');
+  const sec = shapes.has('group'); // Section secili: dolgu rengi ve yazi tipinden sonraki secenekler yok (yalniz Section'i kaldir + Sil)
+  const hasText = !sec && !shapes.has('table');
   const allBasic = [...shapes].every((s) => BASIC.includes(s));
   const size = first.size ?? defaultFontSize(first.shape);
   const align = first.align ?? (first.shape === 'text' || first.text.includes('\n') ? 'l' : 'c');
@@ -265,7 +266,7 @@ export function NodeBar({ nodes }: { nodes: ShapeNode[] }) {
 
   return (
     <div className="tb" ref={barRef} data-hotbar onMouseDown={(e) => e.stopPropagation()}>
-      <ColorDrop title="Dolgu rengi" value={first.color} onPick={(c) => updateNode(ids, { color: c })} allowNone={!shapes.has('text')} />
+      {!sec && <ColorDrop title="Dolgu rengi" value={first.color} onPick={(c) => updateNode(ids, { color: c })} allowNone={!shapes.has('text')} />}
       {!shapes.has('text') && (
         <ColorDrop title="Kenar rengi" ring value={first.stroke ?? ''} shown={first.stroke ?? strokeOf(first)} onPick={(c) => updateNode(ids, { stroke: c })}
           onAuto={() => updateNode(ids, { stroke: undefined })} />
@@ -351,12 +352,12 @@ export function NodeBar({ nodes }: { nodes: ShapeNode[] }) {
         </>
       )}
       <Sep />
-      {nodes.length > 1 && <Btn title="Grupla (Ctrl+G)" onClick={() => useFlow.getState().groupSelection()}><Group size={18} /></Btn>}
-      {nodes.some((n) => n.data.sets?.length) && <Btn title="Grubu dagit - en disteki katman (Ctrl+Shift+G)" onClick={() => useFlow.getState().ungroupSelection()}><Ungroup size={18} /></Btn>}
-      <Btn title="Section olustur (Ctrl+Alt+S)" onClick={() => useFlow.getState().sectionSelection()}><Frame size={18} /></Btn>
-      {shapes.has('group') && <Btn title="Section'i kaldir (Ctrl+Shift+S)" onClick={() => useFlow.getState().unsectionSelection()}><SquareDashed size={18} /></Btn>}
-      <LinkBtn nodes={nodes} />
-      <UnlinkBtn ids={ids} />
+      {!sec && nodes.length > 1 && <Btn title="Grupla (Ctrl+G)" onClick={() => useFlow.getState().groupSelection()}><Group size={18} /></Btn>}
+      {!sec && nodes.some((n) => n.data.sets?.length) && <Btn title="Grubu dagit - en disteki katman (Ctrl+Shift+G)" onClick={() => useFlow.getState().ungroupSelection()}><Ungroup size={18} /></Btn>}
+      {!sec && <Btn title="Section olustur (Ctrl+Alt+S)" onClick={() => useFlow.getState().sectionSelection()}><Frame size={18} /></Btn>}
+      {sec && <Btn title="Section'i kaldir (Ctrl+Shift+S)" onClick={() => useFlow.getState().unsectionSelection()}><SquareDashed size={18} /></Btn>}
+      {!sec && <LinkBtn nodes={nodes} />}
+      {!sec && <UnlinkBtn ids={ids} />}
       <Btn title="Sil (Del)" onClick={() => setNodes((all) => all.filter((n) => !ids.includes(n.id) && !ids.includes(n.parentId ?? '')))}>
         <Trash2 size={18} />
       </Btn>
@@ -425,6 +426,9 @@ export const LINE_TYPES: { kind: EdgeKind; arrow: boolean; title: string; icon: 
   { kind: 'line', arrow: true, title: 'Duz ok', icon: <><path d="M4 19L18 5" /><path d="M10 5h8v8" /></> },
   { kind: 'line', arrow: false, title: 'Duz cizgi', icon: <path d="M4 19L18 5" /> },
 ];
+export function LineIcon({ i, size = 22 }: { i: number; size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{LINE_TYPES[i].icon}</svg>;
+}
 // Uc bicimi (FigJam "start/end point"): yok, cizgi ok, ucgen, baklava, daire. flip: baslangic ucu (ikon sola bakar)
 function CapDrop({ title, value, flip, onPick }: { title: string; value: Cap | undefined; flip?: boolean; onPick: (c: Cap | undefined) => void }) {
   const icon = (cap: Cap | undefined) => (
@@ -538,6 +542,9 @@ export function MainToolbar() {
   const placing = useFlow((s) => s.placing);
   const setTool = useFlow((s) => s.setTool);
   const setPlacing = useFlow((s) => s.setPlacing);
+  const arrowTool = useFlow((s) => s.arrowTool);
+  const arrowKind = useFlow((s) => s.arrowKind);
+  const setArrowTool = useFlow((s) => s.setArrowTool);
   return (
     <div className="main-toolbar">
       <Btn on={!placing && tool === 'select'} title="Sec (V)" onClick={() => { setPlacing(null); setTool('select'); }}><MousePointer2 size={20} /></Btn>
@@ -547,6 +554,23 @@ export function MainToolbar() {
       {(['rect', 'round', 'pill', 'circle', 'diamond', 'db', 'table'] as Shape[]).map((s) => (
         <Btn key={s} on={placing === s} title={SHAPE_NAMES[s] + ' - tikla ve yerlestir, Esc iptal'} onClick={() => setPlacing(placing === s ? null : s)}>{SHAPE_ICON[s]}</Btn>
       ))}
+      {/* Ok araci: en son secilen tur gorunur; yanindaki ok listeden digerleri secilir */}
+      <Sep />
+      <Btn on={arrowTool !== null} title={`Ok: ${LINE_TYPES[arrowKind].title} - surukleyerek ciz (nesneye birakinca kenetlenir, bosa birakinca serbest kalir). Tekerlek: tur degistir`}
+        onClick={() => setArrowTool(arrowTool !== null ? null : arrowKind)}>
+        <LineIcon i={arrowKind} />
+      </Btn>
+      <div className="arrow-drop">
+        <Drop title="Ok turu" trigger={null}>
+          {(close) => (
+            <div className="menu-grid">
+              {LINE_TYPES.map((t, i) => (
+                <Btn key={t.title} on={arrowKind === i} title={t.title} onClick={() => { setArrowTool(i); close(); }}><LineIcon i={i} /></Btn>
+              ))}
+            </div>
+          )}
+        </Drop>
+      </div>
       {/* Section en sonda ve ayri: baglanti kurulamayan tek arac */}
       <Sep />
       <Btn on={placing === 'group'} title={SHAPE_NAMES.group + ' - tikla ve yerlestir, Esc iptal'} onClick={() => setPlacing(placing === 'group' ? null : 'group')}>{SHAPE_ICON.group}</Btn>

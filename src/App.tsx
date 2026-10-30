@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background, BackgroundVariant, ConnectionMode, Controls, MiniMap, NodeToolbar, Position, ReactFlow, ReactFlowProvider,
-  EdgeToolbar, SelectionMode, ViewportPortal, useReactFlow, useStore, useStoreApi,
+  EdgeToolbar, Handle, SelectionMode, ViewportPortal, useReactFlow, useStore, useStoreApi,
 } from '@xyflow/react';
 import { useShallow } from 'zustand/react/shallow';
 import type { OnConnectEnd, OnNodeDrag } from '@xyflow/react';
@@ -9,8 +9,9 @@ import '@xyflow/react/dist/style.css';
 import './App.css';
 import { DEFAULT_SIZE, PALETTE_ROWS, newShapeColor, newStrokeColor, nodeColors, parseTable } from './flow/format';
 import type { Shape, Side } from './flow/format';
-import { QUICK_SHAPES, inPath, useFlow } from './flow/store';
+import { QUICK_SHAPES, inPath, isPt, useFlow } from './flow/store';
 import { FilePicker } from './components/FilePicker';
+import { SearchBox } from './components/SearchBox';
 import { ContextMenu, selectionKind } from './components/ContextMenu';
 import type { ContextTarget } from './components/ContextMenu';
 import { initHotbar } from './flow/hotbar';
@@ -18,23 +19,33 @@ import { aimClear, aimTarget, aimUpdate } from './flow/aim';
 import { absPosition } from './flow/groups';
 import { selSig, useTabLabel } from './flow/tabLabel';
 import { compactNumber, useTokens } from './flow/useTokens';
-import { EyeOff, PanelLeftOpen } from 'lucide-react';
+import { EyeOff, Magnet, Moon, PanelLeftOpen, Sun } from 'lucide-react';
 import type { FlowEdge as FlowEdgeT, ShapeNode as ShapeNodeT } from './flow/store';
 import { ShapeNode } from './components/ShapeNode';
-import { FlowEdge } from './components/FlowEdge';
+import { FlowEdge, SNAP_PX, nodeBox, snapAt } from './components/FlowEdge';
+import { anchor, autoSides, buildPath, pointBox } from './flow/edgeGeom';
+import type { Box } from './flow/edgeGeom';
+import type { ArrowEnd, FlowEdgeData } from './flow/store';
+import type { NodeChange, NodePositionChange } from '@xyflow/react';
 import { ConnectionLine } from './components/ConnectionLine';
-import { ConnectMenu, EdgeBar, LINE_TYPES, MainToolbar, MixedBar, NodeBar, TabChip } from './components/Toolbars';
+import { ConnectMenu, EdgeBar, LINE_TYPES, LineIcon, MainToolbar, MixedBar, NodeBar, TabChip } from './components/Toolbars';
 import type { PendingConnect } from './components/Toolbars';
 import { Sidebar } from './components/Sidebar';
 import { ShapeGhost } from './components/ShapeGhost';
 
-const nodeTypes = { shape: ShapeNode };
+// Serbest ok ucu (store mkPoint): gorunmez; React Flow baglantiyi cizebilsin diye tek bir tutamaci var
+function PointNode() {
+  return <div className="pt-node"><Handle type="source" position={Position.Top} id="p" isConnectable={false} className="pt-handle" /></div>;
+}
+const nodeTypes = { shape: ShapeNode, point: PointNode };
 const edgeTypes = { flow: FlowEdge };
 
 // Fare basili bir islem (tasima, boyutlandirma, bukme...) suruyor mu
 let gesture = false;
 let swallowClick = false;
 // Suren Alt+surukle kopyasi: [orijinal, kopya] ciftleri ve gecici yeniden baglanan dis baglantilar
+// Miknatisin son surukleme adiminda uyguladigi kayma (birakista React Flow'un yolladigi konuma da eklenir)
+let lastSnap: { ids: Set<string>; dx: number; dy: number } | null = null;
 let altDrag: { pairs: [string, string][]; edges: Map<string, { source: string; target: string }> } | null = null;
 
 // Esc: suren islemi oldugu yerde bitir (geri almaz; nesne bulundugu yerde kalir)
@@ -53,7 +64,7 @@ function exitAim() {
 
 // Tab ile yerlestirme araclari arasinda gezinme sirasi (alttaki cubukla ayni)
 // Section dongude yok: baglanti kurulamadigi icin sadece arac cubugundan secilir
-const PLACE_CYCLE = ['text', 'rect', 'round', 'pill', 'circle', 'diamond', 'db', 'table'] as const;
+const PLACE_CYCLE = ['rect', 'round', 'pill', 'circle', 'diamond', 'db', 'table'] as const;
 
 // Tab ile secim (FigJam):
 // - Nesne ve baglanti birlikte seciliyse: sadece baglantilar -> sadece nesneler -> ilk secim -> ... (sonsuz).
@@ -123,7 +134,7 @@ function tabSelect(back: boolean) {
   const unitOf = (n: (typeof s.nodes)[number]) => n.data.sets?.[path.length] ?? n.id;
   // Section'in kendisi seciliyse (icine girilmemis) dongu disarda doner: ayni katmandaki nesneler, Section icerikleri atlanir
   const outerLevel = !s.entered && s.nodes.find((n) => n.selected && n.data.shape === 'group');
-  const scope = s.nodes.filter((n) => (outerLevel ? n.parentId === outerLevel.parentId : !sec || inSection(n.id)) && inPath(n.data.sets ?? [], path));
+  const scope = s.nodes.filter((n) => !isPt(n) && (outerLevel ? n.parentId === outerLevel.parentId : !sec || inSection(n.id)) && inPath(n.data.sets ?? [], path));
   const first = new Map<string, { id: string; p: { x: number; y: number } }>();
   for (const n of scope) {
     const p = absPosition(s.nodes, n.id), u = unitOf(n), f = first.get(u);
@@ -299,12 +310,24 @@ function ZoomHint({ kind }: { kind: 'in' | 'out' | 'reset' }) {
   );
 }
 
+// Miknatis kilavuzlari: hizalanan kenar/orta cizgileri (akis koordinatinda, ekranda ince)
+function Guides() {
+  const g = useFlow((s) => s.guides);
+  if (!g) return null;
+  return (
+    <ViewportPortal>
+      {g.v.map(([x, a, b], i) => <div key={`v${i}`} className="snap-guide v" style={{ left: x, top: a, height: b - a }} />)}
+      {g.h.map(([y, a, b], i) => <div key={`h${i}`} className="snap-guide h" style={{ top: y, left: a, width: b - a }} />)}
+    </ViewportPortal>
+  );
+}
+
 // Sag altta, mini haritanin hemen ustunde: semadaki oge sayilari ve (varsa) secim
 function ItemStats() {
   const sections = useFlow((s) => s.nodes.reduce((k, n) => k + (n.data.shape === 'group' ? 1 : 0), 0));
-  const nodes = useFlow((s) => s.nodes.length) - sections;
+  const nodes = useFlow((s) => s.nodes.reduce((k, n) => k + (isPt(n) ? 0 : 1), 0)) - sections;
   const edges = useFlow((s) => s.edges.length);
-  const selN = useFlow((s) => s.nodes.reduce((k, n) => k + (n.selected ? 1 : 0), 0));
+  const selN = useFlow((s) => s.nodes.reduce((k, n) => k + (n.selected && !isPt(n) ? 1 : 0), 0));
   const selE = useFlow((s) => s.edges.reduce((k, e) => k + (e.selected ? 1 : 0), 0));
   // Esik uyarisi: ayni semayi agent'a GORSEL olarak vermek kac token eder ve yazilar okunur mu?
   // Gorsel tahmini (Claude kurali): uzun kenar en fazla 1568 px ve toplam ~1.15 megapiksele kucultulur, token = piksel / 750.
@@ -377,6 +400,7 @@ function Canvas() {
   const fitSignal = useFlow((s) => s.fitSignal);
   const insertHint = useFlow((s) => s.insertHint);
   const tbHidden = useFlow((s) => s.tbHidden);
+  const dark = useFlow((s) => s.dark);
   const superPreview = useFlow((s) => !!s.quickKeys); // Ctrl+Alt+Shift modu acik: secim cubugu gizlenir
   // Yeni olusturulan nesne: onizlemedeki "basma" animasyonuyla ayni esnek belirme; bitince isaret temizlenir
   const popIds = useFlow((s) => s.popIds);
@@ -395,7 +419,11 @@ function Canvas() {
   // Sekil/renk cizim basladigi anda kilitlenir; onizleme ve sonuc hep ayni nesnedir
   const [drawBox, setDrawBox] = useState<{ x: number; y: number; w: number; h: number; shape: Shape; color: string; stroke?: string } | null>(null);
   const [pending, setPending] = useState<PendingConnect | null>(null);
-  const selectedNodes = useFlow(useShallow((s) => s.nodes.filter((n) => n.selected)));
+  const arrowTool = useFlow((s) => s.arrowTool);
+  const magnet = useFlow((s) => s.magnet);
+  // Ok cizimi suruyor: onizleme yolu (akis koordinati) ve kenetlenilen nesneler
+  const [arrowDraft, setArrowDraft] = useState<{ d: string; kind: number; snapIds: string[] } | null>(null);
+  const selectedNodes = useFlow(useShallow((s) => s.nodes.filter((n) => n.selected && !isPt(n))));
   const selectedEdges = useFlow(useShallow((s) => s.edges.filter((e) => e.selected)));
   const multi = selectedNodes.length + selectedEdges.length > 1;
   const connecting = useStore((s) => s.connection.inProgress);
@@ -459,6 +487,18 @@ function Canvas() {
     let acc = 0;
     const onWheel = (e: WheelEvent) => {
       const s = useFlow.getState();
+      // Ok araci: tekerlek ok turunu degistirir (sekillerde renk degistirdigi gibi)
+      if (s.arrowTool !== null && !e.ctrlKey && !e.metaKey && (e.target as HTMLElement).closest('.react-flow')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.buttons) return;
+        acc += e.deltaY;
+        if (Math.abs(acc) < 50) return;
+        const dir = acc > 0 ? 1 : -1;
+        acc = 0;
+        s.setArrowTool((s.arrowTool + dir + LINE_TYPES.length) % LINE_TYPES.length);
+        return;
+      }
       if (!s.placing || e.ctrlKey || e.metaKey || !(e.target as HTMLElement).closest('.react-flow')) return;
       e.preventDefault();
       e.stopPropagation();
@@ -622,6 +662,24 @@ function Canvas() {
         window.dispatchEvent(new Event('flow-export'));
         return;
       }
+      // Ctrl+Enter: secili Section'in icine gir (cift tikla ayni); secili nesne mantiksal bir gruptaysa grubun bir katman icine
+      if (mod && !e.altKey && !e.shiftKey && e.key === 'Enter' && selected.length) {
+        const sec = selected.length === 1 && selected[0].data.shape === 'group' ? selected[0] : null;
+        if (sec) {
+          e.preventDefault();
+          // Bos Section'a girilmez. Icindeki ilk nesne (Tab sirasi: yukaridan asagi, soldan saga) secilir.
+          const first = s.nodes.filter((n) => n.parentId === sec.id)
+            .map((n) => ({ n, p: absPosition(s.nodes, n.id) }))
+            .sort((x, y) => x.p.y - y.p.y || x.p.x - y.p.x)[0]?.n;
+          if (!first) return;
+          s.setNodes((all) => all.map((n) => (n.selected ? { ...n, selected: false } : n)));
+          s.setEntered(sec.id);
+          useFlow.getState().onNodesChange([{ id: first.id, type: 'select', selected: true }]);
+          // Odak da nesneye gecer: ok tuslari hemen onu tasir (Tab ile ayni)
+          requestAnimationFrame(() => document.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(first.id)}"]`)?.focus({ preventScroll: true }));
+        } else if (s.enterGroupAt(selected[0].id)) e.preventDefault();
+        return;
+      }
       if (mod || e.altKey) return;
       // Hicbir sey secili degilken yon tuslari tuvali kaydirir (FigJam); Shift = hizli. Hareket akicidir: tus basiliyken
       // hiz yumusakca artar, birakinca yumusakca durur (asagidaki panFrame). Kisa basis kucuk, hassas bir kayma yapar.
@@ -663,11 +721,23 @@ function Canvas() {
         useFlow.setState({ edgeStyle: { ...s.edgeStyle, kind: next.kind, arrow: next.arrow } });
         return;
       }
-      if (e.key === 'Tab' && s.placing) {
+      // El (H) ya da yazi (T) araci aktifken Tab ikisi arasinda gecis yapar. Secim araci (V) bu donguye girmez: orada
+      // Tab nesneler arasinda gezer.
+      if (e.key === 'Tab' && (s.tool === 'hand' || s.placing === 'text')) {
         e.preventDefault();
-        const i = PLACE_CYCLE.indexOf(s.placing as (typeof PLACE_CYCLE)[number]);
-        const n = PLACE_CYCLE.length;
-        s.setPlacing(PLACE_CYCLE[(i + (e.shiftKey ? -1 : 1) + n) % n]);
+        if (s.placing === 'text') { s.setPlacing(null); setTool('hand'); }
+        else s.setPlacing('text');
+        return;
+      }
+      // Yerlestirme modunda Tab: sekiller arasinda, en sonda ok araci (en son secilen turuyle), sonra basa doner
+      if (e.key === 'Tab' && (s.placing || s.arrowTool !== null)) {
+        e.preventDefault();
+        const cycle = [...PLACE_CYCLE, 'arrow'] as const;
+        const i = s.arrowTool !== null ? cycle.length - 1 : cycle.indexOf(s.placing as (typeof PLACE_CYCLE)[number]);
+        const n = cycle.length;
+        const next = cycle[(i + (e.shiftKey ? -1 : 1) + n) % n];
+        if (next === 'arrow') s.setArrowTool(s.arrowKind);
+        else s.setPlacing(next);
         return;
       }
       if (e.key === 'Tab' && !mod) {
@@ -681,7 +751,7 @@ function Canvas() {
       else if (e.key === 'h' || e.key === 'H') { s.setPlacing(null); setTool('hand'); }
       else if (e.key === 't' || e.key === 'T') s.setPlacing('text');
       // R: yerlestirme yoksa en son olusturulan sekil (ilk seferde kutu); varsa ayni aracin rengini yeniden rastgele sec
-      else if (e.key === 'r' || e.key === 'R') s.setPlacing(s.placing ?? s.lastShape);
+      else if (e.key === 'r' || e.key === 'R') s.setPlacing(s.placing && s.placing !== 'text' ? s.placing : s.lastShape);
       else if (e.key === 'o' || e.key === 'O') s.setPlacing('circle');
       // Enter / F2: secili tek nesnenin yazisini (ya da tek baglantinin etiketini) duzenle
       else if ((e.key === 'Enter' || e.key === 'F2') && selected.length === 1) {
@@ -696,6 +766,11 @@ function Canvas() {
       } else if (e.key === 'Escape') {
         // Oncelik: suren islemi iptal et > yerlestirmeyi birak > secimi kaldir
         if (gesture) return stopGesture();
+        if (s.arrowTool !== null) {
+          s.setArrowTool(null);
+          setGhost(null);
+          return;
+        }
         if (s.placing) {
           s.setPlacing(null);
           setGhost(null);
@@ -1045,6 +1120,13 @@ function Canvas() {
       marqueeBase = { nodes: new Set(st.nodes.filter((n) => n.selected).map((n) => n.id)), edges: new Set(st.edges.filter((x) => x.selected).map((x) => x.id)) };
     } else if (t.classList.contains('react-flow__pane')) marqueeBase = null;
     const s = useFlow.getState();
+    if (s.arrowTool !== null && e.button === 0) {
+      e.stopPropagation();
+      e.preventDefault();
+      swallowClick = true;
+      startArrow(e, s.arrowTool);
+      return;
+    }
     if (s.placing && e.button === 0) {
       e.stopPropagation();
       e.preventDefault();
@@ -1054,13 +1136,137 @@ function Canvas() {
     }
     gesture = true;
   };
+  // Ok araci: bastigin yerden biraktigin yere ok. Uc bir nesnenin uzerinde/yakinindaysa (miknatis aciksa) ona kenetlenir:
+  // nesnenin icindeyse kenar otomatik, disinda yakinindaysa en yakin kenar. Degilse serbest uc ("x,y") olur.
+  const startArrow = (e: React.PointerEvent, kind: number) => {
+    const t = LINE_TYPES[kind];
+    const nodesI = () => rf.getNodes().map((n) => rf.getInternalNode(n.id)!).filter(Boolean);
+    const endAt = (cx: number, cy: number, skip = ''): { end: ArrowEnd; box: Box; side?: Side } => {
+      const p = rf.screenToFlowPosition({ x: cx, y: cy });
+      const snap = useFlow.getState().magnet ? snapAt(nodesI(), p, skip, SNAP_PX / rf.getZoom()) : undefined;
+      if (!snap) return { end: { x: Math.round(p.x), y: Math.round(p.y) }, box: pointBox(p) };
+      const b = nodeBox(rf.getInternalNode(snap.id)!);
+      const inside = p.x > b.x && p.x < b.x + b.w && p.y > b.y && p.y < b.y + b.h;
+      return { end: { id: snap.id, side: inside ? '*' : snap.side }, box: b, side: inside ? undefined : snap.side };
+    };
+    const sx = e.clientX, sy = e.clientY;
+    const a = endAt(sx, sy);
+    const skipId = 'id' in a.end ? a.end.id : '';
+    let last: ReturnType<typeof endAt> | null = null;
+    const draw = (cx: number, cy: number) => {
+      const b = endAt(cx, cy, skipId);
+      last = b;
+      const auto = autoSides(a.box, b.box);
+      const ss = a.side ?? auto[0], ts = b.side ?? auto[1];
+      const [d] = buildPath({ kind: t.kind } as FlowEdgeData, anchor(a.box, ss), ss, anchor(b.box, ts), ts);
+      setArrowDraft({ d, kind, snapIds: [skipId, 'id' in b.end ? b.end.id : ''].filter(Boolean) });
+    };
+    const move = (ev: PointerEvent) => {
+      if (!last && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
+      draw(ev.clientX, ev.clientY);
+    };
+    const finish = (ok: boolean) => {
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('keydown', key, true);
+      setArrowDraft(null);
+      const b = last as ReturnType<typeof endAt> | null;
+      if (!ok || !b) return;
+      useFlow.getState().addArrow(a.end, b.end, t.kind, t.arrow);
+      useFlow.getState().setArrowTool(null); // FigJam: ok cizilince secim aracina donulur, yeni ok secili
+      setGhost(null);
+    };
+    const up = () => finish(true);
+    const key = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return;
+      ev.stopPropagation();
+      finish(false);
+    };
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('keydown', key, true);
+  };
+
+  // Miknatis: surukleme sirasinda tasinan nesne(ler)in kenar ve ortalari diger nesnelerin kenar/ortalarina 6 ekran
+  // pikselinden yakinsa oraya oturur; hizalanan cizgiler kilavuzla gosterilir (Figma).
+  const onNodesChangeSnap = useCallback((c: NodeChange<ShapeNodeT>[]) => {
+    const s = useFlow.getState();
+    const moves = c.filter((x): x is NodePositionChange => x.type === 'position' && !!x.position && !!x.dragging);
+    if (!moves.length || !s.magnet) {
+      // Surukleme bitti: React Flow son konumu kendi hesabiyla (hizalamasiz) yollar; son hizalama kaymasini ona da uygula
+      const end = lastSnap;
+      lastSnap = null;
+      if (s.guides && c.some((x) => x.type === 'position' && !x.dragging)) useFlow.setState({ guides: null });
+      if (end && (end.dx || end.dy))
+        return onNodesChange(c.map((x) => (x.type === 'position' && !x.dragging && x.position && end.ids.has(x.id) ? { ...x, position: { x: Math.round(x.position.x + end.dx), y: Math.round(x.position.y + end.dy) } } : x)));
+      return onNodesChange(c);
+    }
+    const byId = new Map(s.nodes.map((n) => [n.id, n]));
+    const memo = new Map<string, { x: number; y: number }>();
+    const abs = (id: string): { x: number; y: number } => {
+      const m = memo.get(id);
+      if (m) return m;
+      const n = byId.get(id);
+      if (!n) return { x: 0, y: 0 };
+      const pp = n.parentId ? abs(n.parentId) : { x: 0, y: 0 };
+      const r = { x: pp.x + n.position.x, y: pp.y + n.position.y };
+      memo.set(id, r);
+      return r;
+    };
+    const size = (n: ShapeNodeT) => [n.width ?? n.measured?.width ?? 0, n.height ?? n.measured?.height ?? 0];
+    const ids = new Set(moves.map((m) => m.id));
+    const moving = (n: ShapeNodeT) => {
+      for (let id: string | undefined = n.id; id; id = byId.get(id)?.parentId) if (ids.has(id)) return true;
+      return false;
+    };
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const m of moves) {
+      const n = byId.get(m.id);
+      if (!n) continue;
+      const pa = n.parentId ? abs(n.parentId) : { x: 0, y: 0 };
+      const [w, h] = size(n);
+      const ax = pa.x + m.position!.x, ay = pa.y + m.position!.y;
+      x1 = Math.min(x1, ax); y1 = Math.min(y1, ay); x2 = Math.max(x2, ax + w); y2 = Math.max(y2, ay + h);
+    }
+    const T = 6 / rf.getZoom();
+    const mx = [x1, (x1 + x2) / 2, x2], my = [y1, (y1 + y2) / 2, y2];
+    let bx: { d: number; v: number } | null = null, by: { d: number; v: number } | null = null;
+    const targets: [number, number, number, number][] = [];
+    for (const n of s.nodes) {
+      if (isPt(n) || moving(n)) continue;
+      const a = abs(n.id);
+      const [w, h] = size(n);
+      targets.push([a.x, a.y, w, h]);
+      for (const v of [a.x, a.x + w / 2, a.x + w]) for (const m of mx) if (Math.abs(v - m) <= T && (!bx || Math.abs(v - m) < Math.abs(bx.d))) bx = { d: v - m, v };
+      for (const v of [a.y, a.y + h / 2, a.y + h]) for (const m of my) if (Math.abs(v - m) <= T && (!by || Math.abs(v - m) < Math.abs(by.d))) by = { d: v - m, v };
+    }
+    const dx = bx?.d ?? 0, dy = by?.d ?? 0;
+    // Kilavuzlar: hizalanan cizgi, ona dokunan tum nesneleri ve tasinan kutuyu kapsar
+    const v: [number, number, number][] = [], h: [number, number, number][] = [];
+    if (bx) {
+      let a1 = y1 + dy, a2 = y2 + dy;
+      for (const [x, y, w, hh] of targets) if ([x, x + w / 2, x + w].some((q) => Math.abs(q - bx!.v) < 0.5)) { a1 = Math.min(a1, y); a2 = Math.max(a2, y + hh); }
+      v.push([bx.v, a1, a2]);
+    }
+    if (by) {
+      let a1 = x1 + dx, a2 = x2 + dx;
+      for (const [x, y, w, hh] of targets) if ([y, y + hh / 2, y + hh].some((q) => Math.abs(q - by!.v) < 0.5)) { a1 = Math.min(a1, x); a2 = Math.max(a2, x + w); }
+      h.push([by.v, a1, a2]);
+    }
+    const g = v.length || h.length ? { v, h } : null;
+    if (g || s.guides) useFlow.setState({ guides: g });
+    lastSnap = { ids, dx, dy };
+    if (!dx && !dy) return onNodesChange(c);
+    onNodesChange(c.map((x) => (x.type === 'position' && x.dragging && x.position && ids.has(x.id) ? { ...x, position: { x: Math.round(x.position.x + dx), y: Math.round(x.position.y + dy) } } : x)));
+  }, [onNodesChange, rf]);
+
   const onClickCapture = (e: React.MouseEvent) => {
     if (!swallowClick) return;
     swallowClick = false;
     e.stopPropagation();
   };
   const onMouseMove = (e: React.MouseEvent) => {
-    if (!placing) return;
+    if (!placing && arrowTool === null) return;
     const r = wrap.current!.getBoundingClientRect();
     setGhost({ x: e.clientX - r.left, y: e.clientY - r.top });
   };
@@ -1133,6 +1339,7 @@ function Canvas() {
   // Tasima bitince: tamamen bir grubun icine giren node o gruba girer, cikan cikar (ic ice gruplar dahil)
   const onNodeDragStop: OnNodeDrag<ShapeNodeT> = () => {
     finishAltDrag();
+    if (useFlow.getState().guides) useFlow.setState({ guides: null });
     // Shift hala basiliyken birakildi: vurgulanan baglantinin arasina gir
     const hint = useFlow.getState().insertHint;
     if (hint) useFlow.getState().splitEdge(hint.edge, hint.node);
@@ -1180,11 +1387,18 @@ function Canvas() {
   const onNodeDragStart: OnNodeDrag<ShapeNodeT> = (e, _n, dragged) => {
     if (!e.altKey) return;
     const s = useFlow.getState();
-    const ids = dragged.map((d) => d.id);
+    // Yalniz en ustteki surukleneneler: Section'in icindekiler onunla birlikte gider (ayri cift olursa ust Section'lari
+    // karisir). Kopya tum icerigiyle (copyNodes) olusur; dis baglantilar surukleme boyunca yerinde duran kopyaya baglanir.
+    const all = new Set(dragged.map((d) => d.id));
+    const under = (id: string) => {
+      for (let p = s.nodes.find((x) => x.id === id)?.parentId; p; p = s.nodes.find((x) => x.id === p)?.parentId) if (all.has(p)) return true;
+      return false;
+    };
+    const ids = dragged.map((d) => d.id).filter((id) => !under(id));
     const text = s.copyNodes(ids);
     if (!text) return;
     const map = s.paste(text, 0, undefined, false);
-    const moving = new Set(ids);
+    const moving = new Set(map.keys()); // tasinanlar ve icindekiler (Section)
     const edges = new Map<string, { source: string; target: string }>();
     useFlow.setState({
       edges: useFlow.getState().edges.map((ed) => {
@@ -1223,7 +1437,7 @@ function Canvas() {
   }
 
   return (
-    <main className={`canvas tool-${tool} ${placing ? 'placing' : ''} ${multi ? 'multi-select' : ''} ${connecting ? 'connecting' : ''}`} ref={wrap}
+    <main className={`canvas tool-${tool} ${dark ? 'dark' : ''} ${arrowTool !== null ? 'arrowing' : ''} ${placing ? 'placing' : ''} ${multi ? 'multi-select' : ''} ${connecting ? 'connecting' : ''}`} ref={wrap}
       onContextMenu={(e) => {
         // React Flow'un yakalamadigi yerler (baglanti etiketi, tutamaclar vb.): yine kendi menumuz, o anki secimle
         if (!e.defaultPrevented && (e.target as HTMLElement).closest('.react-flow')) openContext(e);
@@ -1241,7 +1455,7 @@ function Canvas() {
           edges={rfEdges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          onNodesChange={onNodesChange}
+          onNodesChange={onNodesChangeSnap}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeDragStart={onNodeDragStart}
@@ -1297,6 +1511,22 @@ function Canvas() {
           multiSelectionKeyCode="Shift"
         >
           <EnteredGroupFrame />
+          <Guides />
+          {arrowDraft && (
+            <ViewportPortal>
+              <svg className="arrow-draft">
+                <defs>
+                  <marker id="arrow-draft-head" viewBox="-11 -6 12 12" refX="0" refY="0" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+                    <path d="M-9,-5 L0,0 L-9,5" fill="none" stroke="var(--select)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </marker>
+                </defs>
+                <path d={arrowDraft.d} markerEnd={LINE_TYPES[arrowDraft.kind].arrow ? 'url(#arrow-draft-head)' : undefined} />
+              </svg>
+              {arrowDraft.snapIds.length > 0 && (
+                <style>{`${arrowDraft.snapIds.map((id) => `.react-flow__node[data-id="${CSS.escape(id)}"] > :is(.shape-node, .group-node, .table-node)`).join(', ')} { outline: calc(2 * var(--px)) solid var(--select); outline-offset: calc(3 * var(--px)); }`}</style>
+              )}
+            </ViewportPortal>
+          )}
           {popIds.length > 0 && (
             <style>{`${popIds.map((id) => `.react-flow__node[data-id="${CSS.escape(id)}"] > :is(.shape-node, .group-node, .table-node)`).join(', ')} { animation: node-pop 0.38s cubic-bezier(0.34, 1.7, 0.5, 1); }`}</style>
           )}
@@ -1320,9 +1550,9 @@ function Canvas() {
             )}
           </NodeToolbar>
           {!selectedNodes.length && selectedEdges.length > 1 && !dragging && !tbHidden && <EdgesBar edges={selectedEdges} />}
-          <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="#C9C9C9" bgColor="#F5F5F5" />
+          <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color={dark ? '#3a3a3f' : '#C9C9C9'} bgColor={dark ? '#18181b' : '#F5F5F5'} />
           <Controls showInteractive={false} />
-          <MiniMap pannable zoomable nodeColor={(n) => nodeColors((n as ShapeNodeT).data.color).fill} />
+          <MiniMap pannable zoomable nodeColor={(n) => (isPt(n as ShapeNodeT) ? 'transparent' : nodeColors((n as ShapeNodeT).data.color).fill)} />
         </ReactFlow>
       ) : (
         <div className="empty">Soldan bir sema sec ya da yeni sema olustur.</div>
@@ -1338,13 +1568,28 @@ function Canvas() {
         </button>
       )}
       {file && <BarStatus />}
+      {file && (
+        <>
+        <button className={`magnet-btn ${magnet ? 'on' : ''}`} onClick={() => useFlow.getState().toggleMagnet()}
+          title={magnet ? 'Kenetlenme acik: nesneler hizalanir, ok uclari nesnelere baglanir. Kapatmak icin tikla.' : 'Kenetlenme kapali: serbest tasima ve serbest ok uclari. Acmak icin tikla.'}>
+          <Magnet size={18} />
+        </button>
+        <button className="theme-btn" title={dark ? 'Acik tuval' : 'Koyu tuval'} onClick={() => useFlow.getState().toggleDark()}>
+          {dark ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+        </>
+      )}
       {file && <ItemStats />}
+      {file && <SearchBox />}
       {pending && <ConnectMenu pending={pending} onClose={closePending} />}
       {context && <ContextMenu target={context} onClose={closeContext} />}
       {drawBox && (
         <div className="place-ghost" style={{ left: drawBox.x, top: drawBox.y }}>
           <ShapeGhost shape={drawBox.shape} color={drawBox.color} stroke={drawBox.stroke} w={Math.max(drawBox.w, 1)} h={Math.max(drawBox.h, 1)} />
         </div>
+      )}
+      {arrowTool !== null && ghost && !arrowDraft && (
+        <div className="arrow-ghost" style={{ left: ghost.x + 14, top: ghost.y + 14 }}><LineIcon i={arrowTool} size={26} /></div>
       )}
       {placing && ghost && !drawBox && (() => {
         const z = rf.getZoom();

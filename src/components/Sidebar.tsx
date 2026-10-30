@@ -291,10 +291,13 @@ export function Sidebar() {
         Alt: secim cubugu odagi (Sol/Sag gez, Enter calistir, Esc birak) · Alt basili: kisayol rozetleri · Alt+0, 2-9, T Y U I O P [ ]: o dugme/menu · menude yon tuslari + Enter<br />
         Ctrl+yon tuslari: boyutlandir (Shift: buyuk adim)<br />
         F9: sema secici · Alt+N: yeni sema<br />
+        Ctrl+F / F3: semada ara · Enter / F3: sonraki · Shift+Enter / Shift+F3: onceki · Esc: kapat (bulunan oge secili kalir)<br />
         Baglanti cizerken Tab: baglanti turu · Shift+surukle: baglantisiz nesneyi baglantinin arasina ekle<br />
-        Gruptaki nesneye cift tik: grubun icine gir · bosa tik / Esc: cik<br />
+        Gruptaki nesneye cift tik ya da Section / grup seciliyken Ctrl+Enter: icine gir · bosa tik / Esc: cik<br />
         ] en one · [ en arkaya · Ctrl+] / Ctrl+[: bir adim · baglantida ] nesnelerin ustune, [ altina<br />
         Kenardaki noktadan surukle: bagla<br />
+        Ok araci (arac cubugu, ya da sekil modunda Tab ile en sona): surukleyerek ciz · nesneye birakinca kenetlenir, bosa birakinca serbest uc · tekerlek: ok turu<br />
+        Miknatis (sag ust): tasirken nesneleri hizalar, ok uclarini nesnelere baglar · kapaliyken serbest<br />
         Baglanti: uclari tasi, ortadan / etiketten tutup buk<br />
         Ctrl+B kalin · Ctrl+Shift+X cizili<br />
         Tablo: cift tik = hucre modu · surukle/Shift = coklu hucre · cift tik hucre = duzenle · Ctrl+C/X/V · Del · Enter/yaz = duzenle · Esc cik<br />

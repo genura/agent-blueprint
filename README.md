@@ -39,6 +39,7 @@ kaynak>hedef[/secenek] etiket
 | sekil | `rect round pill circle diamond db text group table` |
 | bicim | istege bagli, sirasiz: yazi boyutu `s m l x`, hiza `< ^ >`, kenarlik `0-3`, `~` kesikli, font `M` Montserrat / `O` Orbitron / `W` Work Sans (varsayilan Google Sans yazilmaz), `=X` kenar rengi (palet kodu ya da `=#RRGGBB`; yoksa dolgudan turetilir) (ornek `rect.l3~M=k`) |
 | renk | `k g r o y n t b v p w` (siyah, gri, kirmizi, turuncu, sari, yesil, turkuaz, mavi, mor, pembe, beyaz); BUYUK harf = acik ton; `-` = dolgu yok; `#RRGGBB` = ozel. `text` seklinde renk = yazi rengi |
+| uclar | `from>to`: iki uc da nesne id'si ya da serbest nokta `x,y` (mutlak koordinat, hicbir nesneye bagli degil): `n3>600,200` |
 | secenek | sirasiz: renk, `\|` koseli ya da `_` duz cizgi, `-` oksuz, `1-3` kalinlik, `~` kesikli, `:XY` cikis/giris kenari (`t r b l *`), `@dx,dy` bukum (iki ucun ortasindan kayma), `<X` baslangic ucu ve `>X` bitis ucu (`a` cizgi ok, `t` ucgen, `d` baklava, `c` daire, `n` yok; varsayilan baslangic yok, bitis cizgi ok), `^` baglanti tum nesnelerin ustunde cizilir (varsayilan: altinda) |
 | metin | markdown: `**kalin**`, `~~cizili~~`, satir basinda `-` ve bosluk = liste; `\n` = yeni satir; tabloda hucreler `a\|b\nc\|d` |
 | text w h | yazilmaz (`- -`); yazi kendi boyutunu alir |
@@ -58,20 +59,22 @@ n1>s1/r| assign = yes
 Kenar verilmeyen baglantilarda en yakin kenar otomatik secilir.
 
 Agent icin rehber [FLOW_GUIDE.md](guide/FLOW_GUIDE.md) (Ingilizce, sadece agent okur): format ve kurallar (tum dosyayi yeniden yazma, id'leri degistirme,
-konumu bilmiyorsan `-` yaz...). `guide/` klasorundeki dosyalar master'dir; uygulama secili sema klasorundeki kopyayi her zaman
-master'in aynisi tutar (klasor secilince ve master degisince aninda). Yanina gorsel ornek de konur:
-`FLOW_GUIDE.flow` (her secenegi kullanan sema), `FLOW_GUIDE.png` (uygulamadaki goruntusu) ve `FLOW_GUIDE.mjs` (dogrulayici: `node FLOW_GUIDE.mjs sema.flow`). Her `.flow`
-dosyasinin ilk satiri ona isaret eder. Agent rehberi oturumda bir kez okur, dosyalarda tekrar eden aciklama olmaz.
+konumu bilmiyorsan `-` yaz...). Rehber dort dosyadir ve hepsi `guide/` klasorunde (master): `FLOW_GUIDE.md`, `FLOW_GUIDE.flow`
+(her secenegi kullanan sema), `FLOW_GUIDE.png` (uygulamadaki goruntusu) ve `FLOW_GUIDE.mjs` (dogrulayici). Sema klasorlerine
+yalniz `FLOW_GUIDE.md` kopyalanir; kopyada diger uc dosyanin `guide/` icindeki tam yolu yazar
+(or. `node "<guide>/FLOW_GUIDE.mjs" sema.flow`). Uygulama secili klasordeki, `schema/` ve "Son klasorler" listesindeki
+kopyalari master'a gore guncel tutar (klasor secilince, sunucu acilinca ve master degisince; icerik ayniysa yazmaz).
+Her `.flow` dosyasinin ilk satiri rehbere isaret eder. Agent rehberi oturumda bir kez okur, dosyalarda tekrar eden aciklama olmaz.
 
 ## Agent'a tanitmak
 
 Agent'in calistigi projenin talimat dosyasina (Claude: `CLAUDE.md`, Gemini: `GEMINI.md`, digerleri: `AGENTS.md` ya da kendi dosyasi) bir satir yeterli:
 
 ```text
-Mimari semasi: <sema klasoru>/<ad>.flow (once ayni klasordeki FLOW_GUIDE.md'yi oku; duzenledikten sonra node FLOW_GUIDE.mjs <ad>.flow)
+Mimari semasi: <sema klasoru>/<ad>.flow (once ayni klasordeki FLOW_GUIDE.md'yi oku; duzenledikten sonra orada yazan dogrulayiciyi calistir)
 ```
 
-Agent baska bir projede calisiyorsa bu klasoru o projenin izinli dizinlerine ekle (`/add-dir`).
+Agent baska bir projede calisiyorsa sema klasorunu ve bu projenin `guide/` klasorunu o agent'in izinli dizinlerine ekle (or. `/add-dir`).
 
 ## Kod
 

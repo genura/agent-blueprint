@@ -23,8 +23,11 @@ export async function buildGuideCheck() {
     treeshake: { moduleSideEffects: false },
     output: { file: out, format: 'esm', minify: true },
   });
-  // Kucultme yorumlari siler; uyari satirlarini sonradan basa ekle
-  fs.writeFileSync(out, BANNER + fs.readFileSync(out, 'utf8'));
+  // Kucultme yorumlari siler; uyari satirlarini sonradan basa ekle. Bir kez: iki dev sunucusu (or. 5173 ve test 5174)
+  // ayni anda derlerse dosyada zaten baslik olabilir; tekrarlarini atmadan eklemek basligi her seferinde cogaltiyordu.
+  let body = fs.readFileSync(out, 'utf8');
+  while (body.startsWith(BANNER)) body = body.slice(BANNER.length);
+  fs.writeFileSync(out, BANNER + body);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await buildGuideCheck();

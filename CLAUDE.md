@@ -10,12 +10,15 @@ Kullanim ve format ozeti: [README.md](README.md).
 - `folder-picker.ps1`: modern Windows "Klasor sec" penceresi (IFileOpenDialog); `-DryRun` ile pencere acmadan dogrulanir
 - `reveal.ps1`: klasoru/dosyayi Explorer'da acar ve pencereyi one getirir (acik pencere varsa onu kullanir)
 - `src/components/`: node, edge, arac cubuklari
+- `src/flow/search.ts` + `src/components/SearchBox.tsx`: sema ici arama (Ctrl+F / F3). Yapi ve tum semalarda arama icin
+  hazirlik: [docs/ARAMA.md](docs/ARAMA.md)
 - `guide/`: rehberin MASTER dort dosyasi (sadece burada duzenlenir). `FLOW_GUIDE.md`: agent'lar icin format rehberi (Ingilizce). `FLOW_GUIDE.flow`: tum sekil/renk/bicim/baglanti
   seceneklerini gosteren ornek; `FLOW_GUIDE.png`: o ornegin uygulamadaki goruntusu; `FLOW_GUIDE.mjs`: dogrulayici
   (`scripts/flow-check.ts` + `format.ts`'ten `npm run build:guide` ile uretilir; dev sunucusu kaynak degisince kendisi uretir).
-  Dort dosya tek seydir, hep ayni adla; hepsi MASTER'dir;
-  uygulama secili sema klasorundeki VE varsayilan `schema/` klasorundeki kopyalari master'in aynisi tutar
-  (klasor secilince ve master degisince aninda)
+  Dort dosya tek seydir, hep ayni adla; hepsi MASTER'dir ve `guide/` icinde kalir. Sema klasorlerine YALNIZ
+  `FLOW_GUIDE.md` kopyalanir: master'daki `<GUIDE>` yerine `guide/` tam yolu, `<!-- guide-dir -->` satiri yerine
+  "kopyadir" notu yazilir. Uygulama secili klasordeki, `schema/` ve son klasorlerdeki md kopyalarini guncel tutar
+  (klasor secilince, sunucu acilinca, master md degisince; icerik ayniysa yazmaz). Rehber ornegi uygulamada master'dan okunur
 
 ## Bakim kurallari
 - **REHBER DORTLUSU (`FLOW_GUIDE.md` + `.flow` + `.png` + `.mjs`) HER ZAMAN BIRLIKTE GUNCEL KALIR.**
@@ -31,7 +34,8 @@ Kullanim ve format ozeti: [README.md](README.md).
   4. Gerek yoksa (or. sadece arayuz degisikligi) dokunma, ama kullaniciya "rehber etkilenmedi" diye soyle.
   5. `FLOW_GUIDE.mjs`: kural degistiyse `scripts/flow-check.ts`i guncelle, `npm run build:guide`; rehber ornegi ve
      `FLOW_GUIDE.flow` `node FLOW_GUIDE.mjs` ile 0 hata 0 uyari vermeli. Hata/uyari kodlari rehberde listeli.
-  6. Is bitince aktif sema klasorundeki kopyalarin (varsayilan `schema/`) master ile ayni oldugunu kontrol et.
+  6. Is bitince sema klasorlerindeki `FLOW_GUIDE.md` kopyalarinin surumunun master ile ayni oldugunu kontrol et.
+  7. Master md'de diger uc dosyaya atif hep `<GUIDE>/FLOW_GUIDE.x` bicimindedir; `<!-- guide-dir -->` satirini silme.
 - Rehberi sadece master'da (`guide/`) duzenle; sema klasorundeki kopyaya elle yazma. Kullaniciya dosyadan
   bahsederken tam yolunu ver (master mi, kopya mi belli olsun).
 - `FLOW_GUIDE.md` Ingilizce kalir (sadece agent okur, token tasarrufu). Diger dosyalar Turkce.

@@ -1,7 +1,7 @@
 // FLOW_GUIDE.mjs kaynagi: .flow dogrulayici. Uygulamanin kendi okuyucusunu (format.ts) kullanir, kurallar ayni kalir.
 // Derleme: npm run build:guide  (cikti: FLOW_GUIDE.mjs, tek dosya, bagimliliksiz). Cikti Ingilizce (agent okur).
 import { readFileSync } from 'node:fs';
-import { DEFAULT_SIZE, FONT_PX, NODE_STROKE, defaultFontSize, parseFlow } from '../src/flow/format';
+import { DEFAULT_SIZE, FONT_PX, NODE_STROKE, defaultFontSize, parseFlow, parsePt } from '../src/flow/format';
 import type { FEdge, FIssue, FNode, Side } from '../src/flow/format';
 import { NORMAL, anchor, autoSides, buildPath, makeBox, samplePath } from '../src/flow/edgeGeom';
 import type { Pt } from '../src/flow/edgeGeom';
@@ -20,7 +20,7 @@ const ERR: Record<string, (a: string[]) => string> = {
   E_GROUP_SIZE: () => 'group line needs at least 2 ids',
   E_GROUP_DUP: () => 'same group already exists',
   E_GROUP_OVERLAP: () => 'group partly overlaps another group (must be nested or disjoint)',
-  E_EDGE_NODE: (a) => `edge refers to unknown id "${a[0]}"`,
+  E_EDGE_NODE: (a) => `edge refers to unknown id "${a[0]}" (an end is a node id or a free point x,y)`,
 };
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -176,7 +176,13 @@ export function checkText(text: string): { nodes: number; edges: number; out: Ou
   for (const e of graph.edges) if (e.from === e.to) warn(undefined, e.line, 'W_SELF_EDGE', `${e.from}>${e.to}: edge to itself is not drawn`);
 
   // ---- Oklar: uygulamanin cizdigi yolun aynisi hesaplanir (edgeGeom)
-  const bx = (id: string) => { const b = abs.get(id)!; return makeBox(b.x, b.y, b.w, b.h); };
+  // Serbest uc ("x,y"): sifir boyutlu kutu, ok tam o noktada biter
+  const bx = (id: string) => {
+    const p = parsePt(id);
+    if (p) return makeBox(p.x, p.y, 0, 0);
+    const b = abs.get(id)!;
+    return makeBox(b.x, b.y, b.w, b.h);
+  };
   const solid = nodes.filter((n) => n.shape !== 'group');
   type Drawn = { e: FEdge; name: string; pts: Pt[]; label?: Box };
   const drawn: Drawn[] = [];

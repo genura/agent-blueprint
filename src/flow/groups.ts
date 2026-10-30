@@ -74,6 +74,7 @@ export function regroup(nodes: ShapeNode[]): ShapeNode[] {
 
   let changed = false;
   const next = nodes.map((n) => {
+    if (n.data.pt) return n; // serbest ok ucu: Section'a girmez (konumu hep mutlak)
     const r = rect.get(n.id)!;
     const area = r.w * r.h;
     let best: ShapeNode | undefined;
@@ -87,7 +88,12 @@ export function regroup(nodes: ShapeNode[]): ShapeNode[] {
         bestArea = ga;
       }
     }
-    const parentId = best?.id;
+    // Mevcut Section'i hala tamamen icine aliyorsa nesne orada kalir: ust uste binen kopya (Ctrl+D, Alt+surukle) baska
+    // bir Section'in cocuklarini kendine cekmesin. Yoksa her cogaltmada cocuklar katlanarak artiyordu.
+    const cur = n.parentId ? byId.get(n.parentId) : undefined;
+    const cr = cur?.data.shape === 'group' ? rect.get(cur.id) : undefined;
+    const keep = cr && cr.w * cr.h > area && inside(r, cr);
+    const parentId = keep ? cur!.id : best?.id;
     // Ust duzey grup en arkada; ic grup ebeveyninin ustunde cizilsin
     const zIndex = n.data.shape === 'group' ? (parentId ? undefined : -1) : n.zIndex;
     if (parentId === n.parentId && zIndex === n.zIndex) return n;

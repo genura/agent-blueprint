@@ -172,7 +172,7 @@ export function buildSvg(
 ): string {
   const nodes = useFlow.getState().nodes;
   const data = new Map(nodes.map((n) => [n.id, n.data]));
-  const nodeEls = [...viewport.querySelectorAll<HTMLElement>('.react-flow__node')].filter((e) => ids.nodes.has(e.dataset.id ?? '') && data.has(e.dataset.id ?? ''));
+  const nodeEls = [...viewport.querySelectorAll<HTMLElement>('.react-flow__node')].filter((e) => ids.nodes.has(e.dataset.id ?? '') && data.has(e.dataset.id ?? '') && !data.get(e.dataset.id ?? '')?.pt);
   const below = nodeEls.filter((e) => Number(getComputedStyle(e).zIndex) < 0); // ust duzey gruplar baglantilarin altinda
   const above = nodeEls.filter((e) => !below.includes(e));
   const edges = [...viewport.querySelectorAll<SVGGElement>('.react-flow__edge')].filter((e) => ids.edges.has(e.dataset.id ?? ''));

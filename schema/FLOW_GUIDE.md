@@ -1,18 +1,25 @@
-<!-- flow-guide v19 -->
-# .flow guide v19 (for agents)
+<!-- flow-guide v21 -->
+# .flow guide v21 (for agents)
 
-**FLOW_GUIDE is 4 files with the same name, in this same folder. They are one guide:**
+**FLOW_GUIDE is 4 files with the same name. They are one guide.** Your diagram folder holds only `FLOW_GUIDE.md`
+(this file). The other three files are in the guide folder `C:/Users/Cuneyt/Documents/Projects/agent-blueprint/guide`; every path below that starts with `C:/Users/Cuneyt/Documents/Projects/agent-blueprint/guide`
+is a full path you can use as written.
+This file is a copy written by the app; do not edit it (the master is `C:/Users/Cuneyt/Documents/Projects/agent-blueprint/guide/FLOW_GUIDE.md`).
 | file | what to do with it |
 |---|---|
 | `FLOW_GUIDE.md` | this file: read it as text |
-| `FLOW_GUIDE.flow` | read it as text: a diagram using every shape, color, fmt char, edge option, Section and group; each node's text (and each edge's label) names its own syntax |
-| `FLOW_GUIDE.png` | optional: look at it once as an image if you can view images; it is exactly how the app draws `FLOW_GUIDE.flow` (groups `&` are invisible, so they are only in the text) |
-| `FLOW_GUIDE.mjs` | the validator. **Do not read it, run it:** `node FLOW_GUIDE.mjs <file.flow>` (needs Node.js) |
+| `C:/Users/Cuneyt/Documents/Projects/agent-blueprint/guide/FLOW_GUIDE.flow` | read it as text: a diagram using every shape, color, fmt char, edge option, Section and group; each node's text (and each edge's label) names its own syntax |
+| `C:/Users/Cuneyt/Documents/Projects/agent-blueprint/guide/FLOW_GUIDE.png` | optional: look at it once as an image if you can view images; it is exactly how the app draws `FLOW_GUIDE.flow` (groups `&` are invisible, so they are only in the text) |
+| `C:/Users/Cuneyt/Documents/Projects/agent-blueprint/guide/FLOW_GUIDE.mjs` | the validator. **Do not read it, run it:** `node "C:/Users/Cuneyt/Documents/Projects/agent-blueprint/guide/FLOW_GUIDE.mjs" <file.flow>` (needs Node.js) |
+
+If you are not allowed to read or run files in `C:/Users/Cuneyt/Documents/Projects/agent-blueprint/guide` (it may be outside your working folder), ask the user to give
+you access to that folder. Without the validator you cannot check your edits.
+Do not create or copy `FLOW_GUIDE.*` files into the diagram folder: the app writes `FLOW_GUIDE.md` there itself.
 
 **Version note (remember it):** this guide's version is the number in the first line (`flow-guide vN`). Keep it in memory
 after your first read. When asked to read the guide again, or when unsure it is current, open the first line of
-`FLOW_GUIDE.md`: if the version differs from the one you remember (or you remember none), re-read the `.md` and `.flow`
-(and look at the `.png` if you can), then remember the new version. If it is the same, do not re-read.
+`FLOW_GUIDE.md`: if the version differs from the one you remember (or you remember none), re-read the `.md` and
+`C:/Users/Cuneyt/Documents/Projects/agent-blueprint/guide/FLOW_GUIDE.flow` (and look at the `.png` if you can), then remember the new version. If it is the same, do not re-read.
 
 A `.flow` file is a diagram (boxes + arrows) drawn on a canvas in the Agent Blueprint app.
 The user sees the same file live; when you save, the canvas updates immediately.
@@ -24,9 +31,9 @@ Do not reorder the flow into what seems "logical", do not restyle, do not add an
 
 **After every edit, run the validator.** Start with the short form; ask for details only when you will fix something:
 ```
-node FLOW_GUIDE.mjs --summary path/to/file.flow                  # 1 line + counts per code; E_ lines always in full
-node FLOW_GUIDE.mjs path/to/file.flow                            # every problem, one per line
-node FLOW_GUIDE.mjs --only W_EDGE_THROUGH,W_SIDE path/to/file.flow  # only these codes (a prefix like W_EDGE works too)
+node "C:/Users/Cuneyt/Documents/Projects/agent-blueprint/guide/FLOW_GUIDE.mjs" --summary path/to/file.flow                  # 1 line + counts per code; E_ lines always in full
+node "C:/Users/Cuneyt/Documents/Projects/agent-blueprint/guide/FLOW_GUIDE.mjs" path/to/file.flow                            # every problem, one per line
+node "C:/Users/Cuneyt/Documents/Projects/agent-blueprint/guide/FLOW_GUIDE.mjs" --only W_EDGE_THROUGH,W_SIDE path/to/file.flow  # only these codes (a prefix like W_EDGE works too)
 ```
 Fix every `E_` error; fix `W_` warnings unless they are intended.
 Output: a summary line, then `<line number> <CODE> <message>` lines. Exit code 1 = errors (in every mode).
@@ -49,7 +56,7 @@ Output: a summary line, then `<line number> <CODE> <message>` lines. Exit code 1
 ## Cheat sheet (enough for most edits; details in the sections below)
 ```
 node:   id[@section] shape[.fmt] color x y w h text
-edge:   from>to[/opts] label
+edge:   from>to[/opts] label   (from, to: a node id, or x,y = free end attached to nothing)
 group:  &id,id,id            (select/move together; nothing drawn; after all node lines)
 comment: # anything          (kept by the app, attached to the line below it)
 shape:  rect round pill circle diamond db text group(=Section) table
@@ -65,7 +72,7 @@ text:   **bold** ~~strike~~, "- " bullet, \n new line; table cells a|b\nc|d
 ## 1. Line types
 Every line is one of these. The first characters decide it.
 - Node (a box): `id[@section] shape[.fmt] color x y w h text`
-- Edge (an arrow): `from>to[/opts] label` (no spaces inside `from>to/opts`)
+- Edge (an arrow): `from>to[/opts] label` (no spaces inside `from>to/opts`). `from` and `to` are node ids or free points `x,y`
 - Group (nodes that select and move together, invisible): `&id,id,id` (see section 8)
 - Comment: starts with `#`. The first line is the app's header comment; leave it. Your own comments are kept (section 9).
 
@@ -120,6 +127,11 @@ Example: `n4>n7/:rl` = arrow from n4's right side to n7's left side, gray, curve
 Tips (`<X`, `>X`) only change the drawing at the two ends. They never change the direction: `a>b/<a` is still an edge
 from a to b, drawn with an arrowhead at both ends. `a>b/<c>t` = filled circle at a, filled triangle at b.
 The app does not write defaults: it writes `-` for "no tip at `to`", and never writes `<n` or `>a`.
+
+Free end: `from` or `to` can be a point `x,y` instead of a node id. The arrow then starts or ends exactly at that point
+and is attached to nothing. x y are whole canvas pixels, always absolute (never relative to a Section).
+`n3>600,200` = arrow from n3 to the point (600,200). `40,500>120,500/_-` = a free straight line, no box at either end.
+Both ends can be free. `:XY` has no meaning at a free end; write `*` there if you set the other side.
 
 ## 4. fmt chars (node style)
 | char | meaning | default |
@@ -186,7 +198,7 @@ Careful: inside fmt, `l` is "large font", not "left"; `O` is Orbitron, not orang
 - Several edges between the same two nodes are allowed.
 - Later node lines are drawn on top of earlier node lines. Edges have only two layers, set by the `^` option and not
   by line order: below all nodes (default) or above all nodes (`^`). Edge labels are always on top.
-- Then run the validator (`node FLOW_GUIDE.mjs <file.flow>`) and fix what it reports.
+- Then run the validator (`node "C:/Users/Cuneyt/Documents/Projects/agent-blueprint/guide/FLOW_GUIDE.mjs" <file.flow>`) and fix what it reports.
 
 ## 9. What the app does to the file
 When the user edits the diagram (or a `-` value is resolved), the app writes the whole file again. Expect these changes;

@@ -65,26 +65,32 @@ export function flowFiles(defaultDir = 'schema'): Plugin {
         // ayar dosyasi yoksa varsayilan klasor
       }
 
-      // Agent rehberi: master'lar projedeki guide/ klasorunde. Sema klasorundeki kopya her zaman master'in aynisidir:
-      // klasor secilince ve master her degistiginde aninda yazilir (F5 gerekmez). Rehberi sadece master'da duzenle.
-      // Rehber dort dosya, hepsi ayni adla: metin (.md), ornek sema (.flow), goruntusu (.png), dogrulayici (.mjs)
-      const GUIDE_FILES = ['FLOW_GUIDE.md', 'FLOW_GUIDE.flow', 'FLOW_GUIDE.png', 'FLOW_GUIDE.mjs'];
+      // Agent rehberi: master'lar projedeki guide/ klasorunde (dort dosya: .md, .flow, .png, .mjs). Sema klasorune
+      // sadece FLOW_GUIDE.md yazilir: master'daki `<GUIDE>` yerine guide/ klasorunun tam yolu konur, diger uc dosya
+      // master'dan kullanilir. Klasor secilince ve master md degisince aninda yazilir. Rehberi sadece master'da duzenle.
       const guideDir = path.join(root, 'guide');
-      // Varsayilan klasor (schema/) baska klasor secili olsa da guncel kalir: geri donuldugunde kopya eski olmasin
+      const guideMd = path.join(guideDir, 'FLOW_GUIDE.md');
+      // Kopyadaki yol: ileri egik cizgili (node komutlari her kabukta calissin)
+      const guideCopy = () => fs.readFileSync(guideMd, 'utf8')
+        .replace(/^.*<!-- guide-dir -->.*$/m, 'This file is a copy written by the app; do not edit it (the master is `<GUIDE>/FLOW_GUIDE.md`).')
+        .replaceAll('<GUIDE>', guideDir.split(path.sep).join('/'));
+      // Secili klasor, varsayilan klasor (schema/) ve son klasorlerin hepsi guncel kalir: hangisine donulse kopya eski olmasin.
+      // Sadece icerik farkliysa yazilir; artik olmayan son klasorler atlanir (yeniden olusturulmaz).
       const homeDir = path.resolve(root, defaultDir);
       const installGuide = () => {
-        for (const dir of new Set([cfg.dir, homeDir])) {
-          fs.mkdirSync(dir, { recursive: true });
-          for (const name of GUIDE_FILES) {
-            const src = path.join(guideDir, name);
-            const dst = path.join(dir, name);
-            if (!fs.existsSync(src) || path.resolve(dst) === path.resolve(src)) continue;
-            const data = fs.readFileSync(src);
-            if (!fs.existsSync(dst) || !fs.readFileSync(dst).equals(data)) fs.writeFileSync(dst, data);
-          }
+        if (!fs.existsSync(guideMd)) return;
+        const text = guideCopy();
+        for (const dir of new Set([cfg.dir, homeDir, ...cfg.recent].map((d) => path.resolve(d)))) {
+          if (dir === path.resolve(guideDir)) continue;
+          if (dir === cfg.dir || dir === homeDir) fs.mkdirSync(dir, { recursive: true });
+          else if (!fs.existsSync(dir)) continue;
+          const dst = path.join(dir, 'FLOW_GUIDE.md');
+          if (!fs.existsSync(dst) || fs.readFileSync(dst, 'utf8') !== text) fs.writeFileSync(dst, text, 'utf8');
         }
       };
-      for (const name of GUIDE_FILES) fs.watchFile(path.join(guideDir, name), { interval: 500 }, () => installGuide());
+      fs.watchFile(guideMd, { interval: 500 }, () => installGuide());
+      // Rehber ornegi (.flow) master'dan okunur; degisince acik olan uygulama yeniden yuklesin
+      fs.watchFile(path.join(guideDir, 'FLOW_GUIDE.flow'), { interval: 500 }, () => broadcast({ file: 'FLOW_GUIDE.flow', deleted: false }));
 
       // Dogrulayici (FLOW_GUIDE.mjs) uygulamanin okuyucusundan uretilir: kaynak degisince kendiliginden yeniden derlenir
       const checkSrcs = ['src/flow/format.ts', 'scripts/flow-check.ts'].map((p) => path.join(root, p));
@@ -166,8 +172,8 @@ export function flowFiles(defaultDir = 'schema'): Plugin {
             ? fs.readdirSync(cfg.dir).filter((f) => NAME_RE.test(f) && !HIDDEN.has(f)).map((f) => ({ f, t: born(f) }))
               .sort((a, b) => b.t - a.t || a.f.localeCompare(b.f)).map((x) => x.f)
             : [];
-          // guide: rehber ornegi klasorde var mi (listede gizli; arayuzdeki kutu isaretlenince gosterilir)
-          const guide = fs.existsSync(path.join(cfg.dir, 'FLOW_GUIDE.flow'));
+          // guide: rehber ornegi master'da var mi (listede gizli; arayuzdeki kutu isaretlenince gosterilir)
+          const guide = fs.existsSync(path.join(guideDir, 'FLOW_GUIDE.flow'));
           return json(200, { dir: cfg.dir, files, recent: cfg.recent, guide });
         }
 
@@ -235,7 +241,10 @@ export function flowFiles(defaultDir = 'schema'): Plugin {
         if (url.pathname === '/file') {
           const name = url.searchParams.get('name') ?? '';
           if (!NAME_RE.test(name)) return send(400, 'gecersiz dosya adi');
-          const full = path.join(cfg.dir, name);
+          // Rehber ornegi salt okunur ve sadece master'dan okunur
+          const isGuide = HIDDEN.has(name);
+          if (isGuide && req.method !== 'GET') return send(403, 'rehber dosyasi salt okunur');
+          const full = path.join(isGuide ? guideDir : cfg.dir, name);
           if (req.method === 'GET') {
             if (!fs.existsSync(full)) return send(404, 'yok');
             return send(200, fs.readFileSync(full, 'utf8'));

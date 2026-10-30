@@ -1482,12 +1482,17 @@ body.alt-hints [data-hotbar] > .drop > .tb-btn::after {
    baglanti noktalari kucuk bir ziplamayla cikar. Secili nesnede cerceve cizilmez (zaten secim cercevesi var). */
 .react-flow__node:hover > :is(.shape-node, .group-node, .table-node):not(.selected),
 .react-flow__node[data-aim] > :is(.shape-node, .group-node, .table-node):not(.selected) {
-  outline: calc(2.5 * var(--hp)) solid #8ec5ff;
+  --pre: #ff8ac8; /* fare on secimi: pembe; nisangah on secimi (data-aim): mor */
+  outline: calc(2.5 * var(--hp)) solid var(--pre);
   outline-offset: calc(5 * var(--hp));
+  box-shadow: 0 0 calc(12 * var(--hp)) calc(2 * var(--hp)) color-mix(in srgb, var(--pre) 65%, transparent);
   animation: presel-ring 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
+.react-flow__node[data-aim] > :is(.shape-node, .group-node, .table-node):not(.selected) {
+  --pre: #a97bff;
+}
 @keyframes presel-ring {
-  from { outline-offset: calc(14 * var(--hp)); outline-color: rgb(142 197 255 / 0); }
+  from { outline-offset: calc(14 * var(--hp)); outline-color: transparent; }
 }
 .react-flow__node:hover .side-handle,
 .react-flow__node[data-aim] .side-handle {
@@ -1502,9 +1507,11 @@ body.alt-hints [data-hotbar] > .drop > .tb-btn::after {
 .react-flow__node[data-aim] .side-handle {
   opacity: 1;
 }
-.react-flow__edge:hover:not(.selected) .react-flow__edge-path,
+.react-flow__edge:hover:not(.selected) .react-flow__edge-path {
+  filter: drop-shadow(0 0 calc(2.5 * var(--px)) #ff5cb0) drop-shadow(0 0 calc(1 * var(--px)) #ff5cb0);
+}
 .react-flow__edge[data-aim]:not(.selected) .react-flow__edge-path {
-  filter: drop-shadow(0 0 calc(2.5 * var(--px)) #4c9aff) drop-shadow(0 0 calc(1 * var(--px)) #4c9aff);
+  filter: drop-shadow(0 0 calc(2.5 * var(--px)) #8a55ff) drop-shadow(0 0 calc(1 * var(--px)) #8a55ff);
 }
 /* Nisangah: tuvalin tam ortasinda, zoom'dan bagimsiz sabit boyutta arti; tiklamayi gecirir */
 .aim-cross {
@@ -1523,8 +1530,8 @@ body.alt-hints [data-hotbar] > .drop > .tb-btn::after {
   content: '';
   position: absolute;
   border-radius: 2px;
-  background: var(--select);
-  box-shadow: 0 0 0 1.5px #fff, 0 1px 4px rgb(0 0 0 / 0.25);
+  background: #2fd16b;
+  box-shadow: 0 0 0 1.5px #fff, 0 0 6px 1px rgb(47 209 107 / 0.75), 0 1px 4px rgb(0 0 0 / 0.25);
 }
 .aim-cross::before {
   left: 0;
@@ -1872,4 +1879,345 @@ body.alt-hints [data-hotbar] > .drop > .tb-btn::after {
   background: #fff;
   pointer-events: all;
   cursor: crosshair;
+}
+
+/* ---------- Sema ici arama (Ctrl+F / F3) ---------- */
+/* Kutu: tuvalin sag ustunde, her seyin ustunde; bulaniklik yok, golgeli. Tasininca left/top ile konumlanir. */
+.search-box {
+  position: absolute;
+  z-index: 950;
+  top: 16px;
+  right: 116px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 0 6px 0 4px;
+  border: 1px solid #e3e3e3;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.22), 0 1px 3px rgb(0 0 0 / 0.12);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  cursor: grab;
+  user-select: none;
+  animation: sb-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.search-box:active {
+  cursor: grabbing;
+}
+@keyframes sb-in {
+  0% { opacity: 0; transform: translateY(-8px) scale(0.96); }
+  100% { opacity: 1; transform: none; }
+}
+.search-box .sb-grip {
+  color: #bbb;
+}
+.search-box .sb-icon {
+  color: #777;
+}
+.search-box input {
+  width: 190px;
+  margin-left: 2px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  cursor: text;
+}
+.search-box.none input {
+  color: #d9480f;
+}
+.search-box .sb-count {
+  min-width: 52px;
+  padding-right: 4px;
+  color: #888;
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+.search-box button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #444;
+  cursor: pointer;
+}
+.search-box button:hover:not(:disabled) {
+  background: #efefef;
+}
+.search-box button:disabled {
+  color: #ccc;
+  cursor: default;
+}
+/* Eslesen kelime rozeti: sari; gezilen ogede turuncu (renkler SearchBox'in yazdigi degiskenlerden gelir) */
+mark.hl {
+  margin: 0 -1px;
+  padding: 0 1px;
+  border-radius: 4px;
+  background: var(--hl-bg, #ffe066);
+  color: #1e1e1e;
+  box-shadow: 0 0 0 1.5px var(--hl-ring, #fff3bf), 0 1px 4px rgb(0 0 0 / 0.16);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  animation: var(--hl-anim, none) 0.42s cubic-bezier(0.34, 1.7, 0.5, 1);
+}
+@keyframes hl-pop {
+  0% { box-shadow: 0 0 0 1.5px #ffd9b3, 0 0 0 0 rgb(255 154 60 / 0.6); }
+  100% { box-shadow: 0 0 0 1.5px #ffd9b3, 0 0 0 10px rgb(255 154 60 / 0); }
+}
+/* Arama surerken eslesmeyen ogeler solar (uzerlerine beyaz perde cekilmis gibi); eslesenler belirgin kalir */
+.canvas[data-search] .react-flow__node,
+.canvas[data-search] .react-flow__edge,
+.canvas[data-search] .edge-label {
+  transition: opacity 0.25s;
+}
+.canvas[data-search] .react-flow__node:not(:has(mark.hl)),
+.canvas[data-search] .react-flow__edge,
+.canvas[data-search] .edge-label:not(:has(mark.hl)) {
+  opacity: 0.28;
+}
+
+/* ---------- Koyu tuval ---------- */
+.theme-btn {
+  position: absolute;
+  z-index: 950;
+  top: 16px;
+  right: 16px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid #e3e3e3;
+  border-radius: 10px;
+  background: #fff;
+  color: #333;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.15);
+  cursor: pointer;
+}
+.theme-btn:hover {
+  background: #f3f3f3;
+}
+.canvas.dark .theme-btn {
+  border-color: #f4f4f6;
+  background: #d4d4d9;
+  color: #26262b;
+}
+.canvas.dark .theme-btn:hover {
+  background: #e2e2e6;
+}
+/* Alttaki ana arac cubugu koyu tuvalde koyulasir; secili arac mor kalir */
+.canvas.dark .main-toolbar {
+  border: 1px solid #3a3a3f;
+  background: #26262b;
+  box-shadow: 0 2px 14px rgb(0 0 0 / 0.5);
+}
+.canvas.dark .main-toolbar .tb-btn {
+  color: #eaeaea;
+}
+.canvas.dark .main-toolbar .tb-btn:hover {
+  background: #36363c;
+}
+.canvas.dark .main-toolbar .tb-btn.on {
+  background: #9150f5;
+  color: #fff;
+}
+.canvas.dark .main-toolbar .tb-sep {
+  background: #4a4a50;
+}
+.canvas.dark .edge-label {
+  background: #26262b;
+  color: #eaeaea;
+}
+.canvas.dark .react-flow__controls-button {
+  border-color: #3a3a3f;
+  background: #26262b;
+  fill: #eaeaea;
+}
+.canvas.dark .react-flow__controls-button:hover {
+  background: #323238;
+}
+.canvas.dark .react-flow__minimap {
+  background: #26262b;
+}
+.canvas.dark .react-flow__minimap-mask {
+  fill: rgb(0 0 0 / 0.45);
+}
+.canvas.dark .react-flow__attribution {
+  background: transparent;
+  color: #888;
+}
+.canvas.dark .empty {
+  color: #aaa;
+}
+.canvas.dark .react-flow__controls-button svg {
+  fill: #eaeaea;
+}
+
+/* M menusu (secim cubugu ve acilir menuleri) koyu tuvalde acik gri tona burunur; yazilar koyulasir */
+/* Degiskenler yalniz secim cubugunda degisir: tuvaldeki baska koyu menuler (sag tik, baglanti menusu) beyaz yazili kalir */
+.canvas.dark .tb {
+  --bar: #d4d4d9;
+  --bar-hover: #e6e6ea;
+}
+.canvas.dark .tb,
+.canvas.dark .drop-menu,
+.canvas.dark .menu-list button,
+.canvas.dark .menu-sides button,
+.canvas.dark .tb-hidden-chip,
+.canvas.dark .bar-status {
+  color: #1e1e1e;
+}
+.canvas.dark .tb-hidden-chip,
+.canvas.dark .bar-status {
+  background: #d4d4d9;
+}
+.canvas.dark .tb-hidden-chip:hover,
+.canvas.dark .bar-status:hover {
+  background: #e6e6ea;
+  color: #000;
+}
+.canvas.dark .tb-hidden-chip kbd,
+.canvas.dark .bar-status kbd {
+  border-color: #9a9aa2;
+  color: #444;
+}
+.canvas.dark .menu-list button.on,
+.canvas.dark .menu-sides button.on {
+  background: #b9b9c0;
+}
+.canvas.dark .menu-row {
+  border-top-color: #b0b0b8;
+}
+.canvas.dark [data-hotbar] [data-hot-focus] {
+  outline-color: #1e1e1e;
+}
+
+/* Secim cubugu her zaman en ustte: Section secilince z-index 0 kaliyor, altindaki katmanlar tiklamayi yutuyordu */
+.react-flow__node-toolbar {
+  z-index: 2000 !important;
+}
+
+/* ---------- Kenetlenme (miknatis) ve ok araci ---------- */
+/* Miknatis dugmesi: koyu mod dugmesinin solunda, ayni boyutta; acikken mor */
+.magnet-btn {
+  position: absolute;
+  z-index: 950;
+  top: 16px;
+  right: 64px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid #e3e3e3;
+  border-radius: 10px;
+  background: #fff;
+  color: #999;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.15);
+  cursor: pointer;
+}
+.magnet-btn:hover {
+  background: #f3f3f3;
+}
+.magnet-btn.on {
+  border-color: #9150f5;
+  background: #9150f5;
+  color: #fff;
+}
+.canvas.dark .magnet-btn:not(.on) {
+  border-color: #f4f4f6;
+  background: #d4d4d9;
+  color: #555;
+}
+/* Hizalama kilavuzu: Figma kirmizisi, ekranda 1 piksel */
+.snap-guide {
+  position: absolute;
+  z-index: 1003;
+  background: #f24822;
+  pointer-events: none;
+}
+.snap-guide.v {
+  width: calc(1 * var(--px));
+  transform: translateX(-50%);
+}
+.snap-guide.h {
+  height: calc(1 * var(--px));
+  transform: translateY(-50%);
+}
+/* Ok cizilirken onizleme yolu (akis koordinatinda) */
+.arrow-draft {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+.arrow-draft > path {
+  fill: none;
+  stroke: var(--select);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+/* Ok araci acik: imlec arti, yaninda secili ok turunun kucuk onizlemesi */
+.canvas.arrowing .react-flow__pane,
+.canvas.arrowing .react-flow__node,
+.canvas.arrowing .react-flow__node * {
+  cursor: crosshair !important;
+}
+.arrow-ghost {
+  position: absolute;
+  z-index: 7;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.92);
+  color: var(--select);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+  pointer-events: none;
+  animation: node-pop 0.3s cubic-bezier(0.34, 1.7, 0.5, 1);
+}
+/* Arac cubugundaki ok turu listesi: dar dugme; cubuk altta oldugu icin menu yukari acilir */
+.main-toolbar .arrow-drop > .drop > .tb-btn {
+  width: 18px;
+  min-width: 18px;
+  padding: 0;
+  margin-left: -2px;
+}
+.main-toolbar .drop-menu {
+  top: auto;
+  bottom: calc(100% + 10px);
+}
+/* Menu koyu zeminli: icindeki dugmeler acik renk (ana cubugun koyu ikon rengi buraya gecmesin) */
+.main-toolbar .drop-menu .tb-btn {
+  width: 40px;
+  height: 40px;
+  color: #fff;
+}
+.main-toolbar .drop-menu .tb-btn:hover {
+  background: var(--bar-hover);
+}
+.main-toolbar .drop-menu .tb-btn.on {
+  background: #9150f5;
+  color: #fff;
+}
+/* Serbest ok ucu: gorunmez nesne */
+.pt-node {
+  width: 2px;
+  height: 2px;
+  pointer-events: none;
+}
+.pt-node .pt-handle {
+  opacity: 0;
+  pointer-events: none;
 }

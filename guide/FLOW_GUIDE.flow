@@ -114,6 +114,7 @@ p2>q2/<c /<c circle start
 p3>q3/<d>t /<d>t diamond, triangle
 p4>q4/<a /<a arrow both ends
 r1>r2/^ /^ above nodes
+r2>960,1944 r2>960,1944 free end x,y
 c>nt/:tb :tb
 c>nr/:rl :rl
 c>nr/:tt :tt (2nd edge, same pair)

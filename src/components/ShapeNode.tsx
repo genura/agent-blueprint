@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Handle, NodeResizer, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import { Plus } from 'lucide-react';
-import { DASH, FONT_PX, NODE_STROKE, defaultFontSize, fontCss, nodeColors, parseTable, tableText } from '../flow/format';
+import { DASH, FONT_PX, NODE_STROKE, defaultFontSize, fontCss, ink, nodeColors, parseTable, tableText } from '../flow/format';
 import type { Side } from '../flow/format';
 import { wrapSelection } from '../flow/markup';
 import { QUICK_GAP, quickOffset, useFlow } from '../flow/store';
@@ -473,6 +473,7 @@ export function ShapeNode({ id, data, selected, width, height }: NodeProps<Shape
   const editing = useFlow((s) => s.editingId === id);
   const tool = useFlow((s) => s.tool);
   const entered = useFlow((s) => s.entered === id);
+  const dark = useFlow((s) => s.dark);
   const [resizing, setResizing] = useState(false); // tutamacla boyutlandirma suruyor: kenar noktalari/oklar gizlenir
   const rootRef = useRef<HTMLDivElement>(null);
   // Icine girilen Section: disina tiklayinca ya da Esc ile cikilir
@@ -502,7 +503,7 @@ export function ShapeNode({ id, data, selected, width, height }: NodeProps<Shape
   const align = data.align ?? (shape === 'text' || text.includes('\n') ? 'l' : 'c');
   const fontSize = FONT_PX[data.size ?? defaultFontSize(shape)];
   const sw = NODE_STROKE[data.weight ?? 2];
-  const textStyle: React.CSSProperties = { color: c.text, fontSize, fontFamily: fontCss(data.font), textAlign: align === 'l' ? 'left' : align === 'r' ? 'right' : 'center' };
+  const textStyle: React.CSSProperties = { color: shape === 'text' ? ink(c.text, dark) : c.text, fontSize, fontFamily: fontCss(data.font), textAlign: align === 'l' ? 'left' : align === 'r' ? 'right' : 'center' };
 
   const start = () => {
     if (tool === 'select') useFlow.getState().setEditing(id);
